@@ -1,0 +1,29 @@
+[
+  {
+    "_id": { "$oid": "64de00000000000000000101" },
+    "appId": "my_chatbot_app",
+    "contentType": "qa",
+    "content": {
+      "question": "What is your return policy?",
+      "answer": "You can return any item within 30 days of purchase for a full refund.",
+      "language": "en"
+    },
+    "embedding": [0.123, 0.456, 0.789],
+    "sourceRef": null,
+    "createdAt": { "$date": "2025-08-12T09:15:00Z" },
+    "updatedAt": { "$date": "2025-08-12T09:15:00Z" }
+  },
+  {
+    "_id": { "$oid": "64de00000000000000000102" },
+    "appId": "my_chatbot_app",
+    "contentType": "note",
+    "content": {
+      "text": "Our offices are closed on public holidays.",
+      "language": "en"
+    },
+    "embedding": [0.234, 0.567, 0.890],
+    "sourceRef": null,
+    "createdAt": { "$date": "2025-08-12T09:16:00Z" },
+    "updatedAt": { "$date": "2025-08-12T09:16:00Z" }
+  }
+]

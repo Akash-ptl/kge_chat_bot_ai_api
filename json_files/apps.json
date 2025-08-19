@@ -1,0 +1,16 @@
+[
+  {
+    "_id": "my_chatbot_app",
+    "name": "My Support Bot",
+    "description": "Example chatbot app for demos",
+    "welcomeMessage": {
+      "en": "Hello! How can I help you today?",
+      "es": "¡Hola! ¿En qué puedo ayudarte hoy?"
+    },
+    "defaultLanguage": "en",
+    "availableLanguages": ["en", "es"],
+    "googleApiKey": "ENCRYPTED_API_KEY_HERE",
+    "createdAt": { "$date": "2025-08-12T09:00:00Z" },
+    "updatedAt": { "$date": "2025-08-12T09:00:00Z" }
+  }
+]

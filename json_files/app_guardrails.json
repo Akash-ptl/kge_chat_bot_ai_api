@@ -1,0 +1,17 @@
+[
+  {
+    "_id": { "$oid": "64de00000000000000000201" },
+    "appId": "my_chatbot_app",
+    "ruleName": "No Offensive Language",
+    "ruleType": "blacklist_phrase",
+    "pattern": "(?i)(badword1|badword2)",
+    "action": "block_input",
+    "responseMessage": {
+      "en": "I cannot respond to that request.",
+      "es": "No puedo responder a esa solicitud."
+    },
+    "isActive": true,
+    "createdAt": { "$date": "2025-08-12T09:20:00Z" },
+    "updatedAt": { "$date": "2025-08-12T09:20:00Z" }
+  }
+]

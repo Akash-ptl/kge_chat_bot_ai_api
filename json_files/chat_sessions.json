@@ -1,0 +1,10 @@
+[
+  {
+    "_id": "session_123456",
+    "appId": "my_chatbot_app",
+    "startedAt": { "$date": "2025-08-12T09:30:00Z" },
+    "lastActiveAt": { "$date": "2025-08-12T09:35:00Z" },
+    "status": "active",
+    "language": "en"
+  }
+]

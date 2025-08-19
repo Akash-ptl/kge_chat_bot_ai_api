@@ -1,0 +1,26 @@
+[
+  {
+    "_id": { "$oid": "64de00000000000000000301" },
+    "appId": "my_chatbot_app",
+    "sessionId": "session_123456",
+    "sender": "user",
+    "message": "Hi there!",
+    "timestamp": { "$date": "2025-08-12T09:31:00Z" },
+    "language": "en",
+    "embedding": [0.345, 0.678, 0.901],
+    "guardrailTriggered": false,
+    "guardrailRuleId": null
+  },
+  {
+    "_id": { "$oid": "64de00000000000000000302" },
+    "appId": "my_chatbot_app",
+    "sessionId": "session_123456",
+    "sender": "ai",
+    "message": "Hello! How can I assist you today?",
+    "timestamp": { "$date": "2025-08-12T09:31:05Z" },
+    "language": "en",
+    "embedding": null,
+    "guardrailTriggered": false,
+    "guardrailRuleId": null
+  }
+]
