@@ -1,0 +1,84 @@
+# Chatbot Platform API: Deployment & Usage Reference
+
+## 1. Gemini Model & API Key
+- **Gemini Model Used:** `gemini-1.5-flash`
+- **Google API Key:**
+  - Example: `AIzaSyDVm1IWybAQwb-AtcxwXWd3R5Oww4ZhOkc`
+  - Each app stores its own API key in the `googleApiKey` field (encrypted in production).
+- **Gemini Endpoint:**
+  - `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=<API_KEY>`
+
+## 2. API Endpoints & Example Payloads
+
+### Admin Endpoints
+- **Q&A CRUD:** `/api/v1/admin/app/{appId}/qa`
+  - Example:
+    ```json
+    {"question": "What is FastAPI?", "answer": "A modern Python API framework.", "language": "en"}
+    ```
+- **Notes CRUD:** `/api/v1/admin/app/{appId}/notes`
+  - Example:
+    ```json
+    {"text": "This is a note.", "language": "en"}
+    ```
+- **URLs CRUD:** `/api/v1/admin/app/{appId}/urls`
+  - Example:
+    ```json
+    {"url": "https://fastapi.tiangolo.com/", "description": "Official docs", "language": "en"}
+    ```
+- **Documents CRUD:** `/api/v1/admin/app/{appId}/documents`
+  - Example:
+    ```json
+    {"filename": "file.pdf", "filetype": "pdf", "language": "en"}
+    ```
+- **Guardrails CRUD:** `/api/v1/admin/app/{appId}/guardrails`
+  - Example:
+    ```json
+    {"ruleName": "No Spam", "ruleType": "blacklist_phrase", "pattern": "spam", "action": "block", "responseMessage": {"en": "No spam allowed."}, "isActive": true}
+    ```
+- **Settings:**
+  - Welcome Message: `/api/v1/admin/app/{appId}/settings/welcome-message` (string)
+  - Languages: `/api/v1/admin/app/{appId}/settings/languages` (list of strings)
+  - Google API Key: `/api/v1/admin/app/{appId}/settings/google-api-key` (string)
+
+### Chat User Endpoint
+- **Send Message:** `/api/v1/chat/message`
+  - Headers: `X-App-ID`, optional `X-Session-ID`
+  - Example Request:
+    ```json
+    {"message": "Hello, bot!"}
+    ```
+  - Example Response:
+    ```json
+    {"sessionId": "...", "message": "Hi! How can I help you today?", "guardrailTriggered": false, "guardrailRuleId": null}
+    ```
+
+## 3. All Cases & Conditions
+- **Guardrails:** Input and output guardrails block or modify messages based on rules (e.g., blacklist phrases).
+- **Welcome Message:** Returned on new session or as configured.
+- **Language Switching:** Supported via `/settings/languages` and session logic.
+- **Error Handling:**
+  - 400: Bad request (missing fields, etc.)
+  - 404: Not found (app, content, etc.)
+  - 502: Gemini API error (invalid key, quota, etc.)
+- **Session Management:**
+  - If no `X-Session-ID`, a new session is created and returned.
+- **Embedding:** All content and chat messages are embedded and stored in MongoDB.
+
+## 4. Test Coverage
+- All CRUD, chat, guardrail, welcome, language switch, and error cases are covered by automated tests.
+
+## 5. Deployment Notes
+- **MongoDB** required (see `.env` for connection string).
+- **Google API Key** required for Gemini integration.
+- **Run server:**
+  ```bash
+  uvicorn app.main:app --reload
+  ```
+- **Run tests:**
+  ```bash
+  python3 app/tests/test_advanced_cases_http.py
+  ```
+
+---
+This file documents all models, endpoints, Gemini config, API key usage, and all tested cases/conditions for your chatbot backend.
