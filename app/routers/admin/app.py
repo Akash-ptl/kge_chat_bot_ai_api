@@ -1,20 +1,25 @@
 # app/routers/admin/app.py
+import uuid
 from fastapi import APIRouter, HTTPException
-from ...db import apps_collection
+from app.db import apps_collection
 from ...models.app import AppModel
 
 router = APIRouter(prefix="/api/v1/admin/app", tags=["App Admin - Apps"])
 
 @router.post("/")
 async def create_app(app: AppModel):
-	app_dict = app.dict(by_alias=True)
-	result = await apps_collection.insert_one(app_dict)
-	return {"id": str(result.inserted_id)}
+	doc = app.dict(by_alias=True)
+	doc["_id"] = str(uuid.uuid4())
+	result = await apps_collection.insert_one(doc)
+	return {"id": doc["_id"]}
 
-@router.get("/")
+from typing import List
+
+@router.get("/", response_model=List[AppModel])
 async def list_apps():
 	apps = await apps_collection.find().to_list(100)
-	return apps
+	print("DEBUG: MongoDB returned:", apps)
+	return apps if apps else []
 
 @router.get("/{app_id}")
 async def get_app(app_id: str):

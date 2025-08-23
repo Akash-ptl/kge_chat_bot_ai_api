@@ -1,9 +1,9 @@
 
 from fastapi import APIRouter, HTTPException
 from fastapi import BackgroundTasks
-from ...db import app_content_collection
+from app.db import app_content_collection
 
-router = APIRouter(prefix="/api/v1/admin/app/{appId}/reindex", tags=["Admin Reindex"])
+router = APIRouter(prefix="/api/v1/admin/app/{appId}/train", tags=["Admin Train"])
 
 async def reindex_content(appId: str):
 	# Placeholder for actual re-indexing logic (e.g., re-embedding)
@@ -12,7 +12,7 @@ async def reindex_content(appId: str):
 	return count
 
 @router.post("", response_model=dict)
-async def trigger_reindex(appId: str, background_tasks: BackgroundTasks):
+async def trigger_train(appId: str, background_tasks: BackgroundTasks):
 	# In real implementation, this would trigger async re-embedding
 	background_tasks.add_task(reindex_content, appId)
-	return {"message": f"Re-indexing triggered for appId={appId}"}
+	return {"message": f"Training (re-indexing) triggered for appId={appId}"}

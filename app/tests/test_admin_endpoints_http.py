@@ -1,7 +1,7 @@
 import requests
 import time
 
-BASE_URL = "http://127.0.0.1:8001"
+BASE_URL = "http://127.0.0.1:8000"
 
 def wait_for_server():
     for _ in range(10):
@@ -113,9 +113,9 @@ def test_guardrail_crud():
     assert r.status_code == 200
 
 def test_reindex():
-    r = requests.post(f"{BASE_URL}/api/v1/admin/app/test_app/reindex")
+    r = requests.post(f"{BASE_URL}/api/v1/admin/app/test_app/train")
     assert r.status_code == 200
-    assert "Re-indexing triggered" in r.json()["message"]
+    assert "Training (re-indexing) triggered" in r.json()["message"]
 
 if __name__ == "__main__":
     assert wait_for_server(), "API server not running on http://127.0.0.1:8001"

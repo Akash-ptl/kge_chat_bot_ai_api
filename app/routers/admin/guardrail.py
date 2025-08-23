@@ -1,10 +1,10 @@
 
 
 from fastapi import APIRouter, HTTPException, Body
-from ...db import guardrails_collection
+from app.db import guardrails_collection
 from ...models.guardrail import GuardrailModel
 from typing import List
-from bson import ObjectId
+import uuid
 
 router = APIRouter(prefix="/api/v1/admin/app/{appId}/guardrails", tags=["Admin Guardrail"])
 
@@ -13,8 +13,7 @@ def to_dict(obj):
 		return {k: to_dict(v) for k, v in obj.items()}
 	if isinstance(obj, list):
 		return [to_dict(i) for i in obj]
-	if isinstance(obj, ObjectId):
-		return str(obj)
+	# No ObjectId conversion needed; all IDs are strings
 	return obj
 
 # POST /api/v1/admin/app/{appId}/guardrails
@@ -22,21 +21,20 @@ def to_dict(obj):
 async def create_guardrail(appId: str, guardrail: GuardrailModel = Body(...)):
 	doc = guardrail.dict(by_alias=True)
 	doc["appId"] = appId
-	if "_id" in doc and (doc["_id"] is None or doc["_id"] == ""):
-		del doc["_id"]
+	doc["_id"] = str(uuid.uuid4())
 	result = await guardrails_collection.insert_one(doc)
-	return {"id": str(result.inserted_id)}
+	return {"id": doc["_id"]}
 
 # GET /api/v1/admin/app/{appId}/guardrails
 @router.get("", response_model=List[dict])
 async def list_guardrails(appId: str):
 	guards = await guardrails_collection.find({"appId": appId}).to_list(100)
-	return [to_dict(g) for g in guards]
+	return [to_dict(g) for g in guards] if guards else []
 
 # GET /api/v1/admin/app/{appId}/guardrails/{ruleId}
 @router.get("/{ruleId}", response_model=dict)
 async def get_guardrail(appId: str, ruleId: str):
-	guard = await guardrails_collection.find_one({"_id": ObjectId(ruleId), "appId": appId})
+	guard = await guardrails_collection.find_one({"_id": ruleId, "appId": appId})
 	if not guard:
 		raise HTTPException(status_code=404, detail="Guardrail not found")
 	return to_dict(guard)
@@ -45,7 +43,7 @@ async def get_guardrail(appId: str, ruleId: str):
 @router.put("/{ruleId}", response_model=dict)
 async def update_guardrail(appId: str, ruleId: str, guardrail: GuardrailModel = Body(...)):
 	update_result = await guardrails_collection.update_one(
-		{"_id": ObjectId(ruleId), "appId": appId},
+		{"_id": ruleId, "appId": appId},
 		{"$set": guardrail.dict(exclude_unset=True, by_alias=True)}
 	)
 	if update_result.modified_count == 0:
@@ -55,7 +53,7 @@ async def update_guardrail(appId: str, ruleId: str, guardrail: GuardrailModel = 
 # DELETE /api/v1/admin/app/{appId}/guardrails/{ruleId}
 @router.delete("/{ruleId}", response_model=dict)
 async def delete_guardrail(appId: str, ruleId: str):
-	delete_result = await guardrails_collection.delete_one({"_id": ObjectId(ruleId), "appId": appId})
+	delete_result = await guardrails_collection.delete_one({"_id": ruleId, "appId": appId})
 	if delete_result.deleted_count == 0:
 		raise HTTPException(status_code=404, detail="Guardrail not found")
 	return {"message": "Guardrail deleted successfully"}

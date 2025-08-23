@@ -6,8 +6,15 @@ client = AsyncIOMotorClient(settings.MONGO_URL)
 db = client[settings.MONGO_DB_NAME]
 
 # Collections
-apps_collection = db["apps"]
+
+
+# Exported collections for use in routers
+app_collection = db["apps"]
 app_content_collection = db["app_content"]
-guardrails_collection = db["app_guardrails"]
-sessions_collection = db["chat_sessions"]
-messages_collection = db["chat_messages"]
+app_guardrails_collection = db["app_guardrails"]
+chat_sessions_collection = db["chat_sessions"]
+chat_messages_collection = db["chat_messages"]
+
+# Aliases for backward compatibility with routers (must be after originals)
+apps_collection = app_collection
+guardrails_collection = app_guardrails_collection
