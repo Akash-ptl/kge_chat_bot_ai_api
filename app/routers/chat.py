@@ -10,17 +10,29 @@ class ChatMessageResponse(BaseModel):
     message: str = Field(..., example="Hi! How can I help you today?")
     guardrailTriggered: bool = Field(..., example=False)
     guardrailRuleId: Optional[str] = Field(None, example="a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6")
+    language: str = Field(..., example="en")
 from uuid import uuid4
 from app.db import app_collection, chat_sessions_collection, chat_messages_collection, app_content_collection, app_guardrails_collection
+import base64
 import httpx
+import logging
 import datetime
 
 router = APIRouter(prefix="/api/v1/chat", tags=["Chat User"])
+
+def decrypt_api_key(enc_key: str) -> str:
+    return base64.b64decode(enc_key.encode()).decode()
 
 async def get_app(app_id: str):
     app = await app_collection.find_one({"_id": app_id})
     if not app:
         raise HTTPException(status_code=404, detail="App not found")
+    # Decrypt Google API key if present
+    if app.get("googleApiKey"):
+        try:
+            app["googleApiKey"] = decrypt_api_key(app["googleApiKey"])
+        except Exception:
+            pass
     return app
 
 async def get_session(app_id: str, session_id: Optional[str]):
@@ -45,18 +57,58 @@ async def apply_guardrails(app_id: str, text: str, language: str, direction: str
     # direction: "input" or "output"
     guardrails = await app_guardrails_collection.find({"appId": app_id, "isActive": True}).to_list(100)
     for rule in guardrails:
-        if rule["ruleType"] == "blacklist_phrase" and rule["pattern"] in text:
-            return {
-                "blocked": True,
-                "ruleId": str(rule["_id"]),
-                "message": rule["responseMessage"].get(language, "Blocked by guardrail.")
-            }
+        rule_type = rule.get("ruleType")
+        pattern = rule.get("pattern", "")
+        action = rule.get("action", "block_input")
+        response_msg = rule.get("responseMessage", {}).get(language, "Blocked by guardrail.")
+        # Blacklist phrase
+        if rule_type == "blacklist_phrase" and pattern in text:
+            if action == "block_input":
+                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
+            elif action == "override_response":
+                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
+            elif action == "log_only":
+                # Log only, do not block
+                return {"blocked": False, "ruleId": str(rule["_id"]), "message": response_msg}
+        # Topic restriction (simple substring match)
+        if rule_type == "topic_restriction" and pattern in text:
+            if action == "block_input":
+                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
+            elif action == "override_response":
+                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
+            elif action == "log_only":
+                return {"blocked": False, "ruleId": str(rule["_id"]), "message": response_msg}
+        # Response filter (for output)
+        if direction == "output" and rule_type == "response_filter" and pattern in text:
+            if action == "override_response":
+                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
+            elif action == "block_input":
+                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
+            elif action == "log_only":
+                return {"blocked": False, "ruleId": str(rule["_id"]), "message": response_msg}
     return {"blocked": False}
 
 async def get_relevant_content(app_id: str, embedding: list, limit: int = 5):
-    # Placeholder: fetch most recent content for now
-    docs = await app_content_collection.find({"appId": app_id}).sort("updatedAt", -1).to_list(limit)
-    return docs
+    # Vector similarity search using embedding (cosine similarity)
+    from numpy import dot
+    from numpy.linalg import norm
+    import numpy as np
+    if not embedding:
+        # fallback: fetch most recent
+        docs = await app_content_collection.find({"appId": app_id, "contentType": "document"}).sort("updatedAt", -1).to_list(limit)
+        return docs
+    # Fetch all document embeddings for this app
+    docs = await app_content_collection.find({"appId": app_id, "contentType": "document", "embedding": {"$exists": True}}).to_list(100)
+    scored = []
+    emb = np.array(embedding)
+    for d in docs:
+        doc_emb = np.array(d.get("embedding", []))
+        if doc_emb.size == 0:
+            continue
+        sim = float(dot(emb, doc_emb) / (norm(emb) * norm(doc_emb) + 1e-8))
+        scored.append((sim, d))
+    scored.sort(reverse=True, key=lambda x: x[0])
+    return [d for sim, d in scored[:limit]]
 
 async def get_last_messages(app_id: str, session_id: str, limit: int = 10):
     msgs = await chat_messages_collection.find({"appId": app_id, "sessionId": session_id}).sort("timestamp", -1).to_list(limit)
@@ -80,12 +132,76 @@ async def call_gemma_api(api_key: str, prompt: str, model: str = "gemini-1.5-fla
 
 @router.post("/message", response_model=ChatMessageResponse)
 async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x_app_id: str = Header(...), x_session_id: Optional[str] = Header(None)):
+    logging.info(f"[chat_message] Called with app_id={x_app_id} session_id={x_session_id} message={body.message}")
     app = await get_app(x_app_id)
     session = await get_session(x_app_id, x_session_id)
     language = session.get("language") or app.get("defaultLanguage", "en")
     user_message = body.message
     if not user_message:
         raise HTTPException(status_code=400, detail="Message required")
+
+    # 1. Language switch detection (simple keyword-based)
+    switch_phrases = [
+        ("switch to spanish", "es"),
+        ("speak in spanish", "es"),
+        ("switch to french", "fr"),
+        ("speak in french", "fr"),
+        ("switch to english", "en"),
+        ("speak in english", "en")
+    ]
+    user_message_lower = user_message.lower()
+    switched = False
+    for phrase, lang in switch_phrases:
+        if phrase in user_message_lower:
+            language = lang
+            await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"language": lang}})
+            switched = True
+            break
+
+    # 2. Welcome message on new session
+    is_new_session = not x_session_id or not session.get("lastActiveAt")
+    if is_new_session:
+        welcome = app.get("welcomeMessage", {}).get(language, "Welcome!")
+        now = datetime.datetime.utcnow()
+        await chat_messages_collection.insert_one({
+            "appId": x_app_id,
+            "sessionId": session["_id"],
+            "sender": "ai",
+            "message": welcome,
+            "timestamp": now,
+            "language": language
+        })
+        await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"lastActiveAt": now}})
+        return ChatMessageResponse(
+            sessionId=session["_id"],
+            message=welcome,
+            guardrailTriggered=False,
+            guardrailRuleId=None,
+            language=language
+        )
+
+    # 3. Thank you/acknowledgment detection
+    thank_you_phrases = ["thank you", "thanks", "thx", "gracias", "merci"]
+    if any(phrase in user_message_lower for phrase in thank_you_phrases):
+        ack = app.get("acknowledgmentMessage", {}).get(language, "You're welcome!")
+        now = datetime.datetime.utcnow()
+        await chat_messages_collection.insert_one({
+            "appId": x_app_id,
+            "sessionId": session["_id"],
+            "sender": "ai",
+            "message": ack,
+            "timestamp": now,
+            "language": language
+        })
+        await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"lastActiveAt": now}})
+        return ChatMessageResponse(
+            sessionId=session["_id"],
+            message=ack,
+            guardrailTriggered=False,
+            guardrailRuleId=None,
+            language=language
+        )
+
     # Input guardrails
     guardrail_result = await apply_guardrails(x_app_id, user_message, language, direction="input")
     if guardrail_result["blocked"]:
@@ -93,14 +209,37 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
             sessionId=session["_id"],
             message=guardrail_result["message"],
             guardrailTriggered=True,
-            guardrailRuleId=guardrail_result["ruleId"]
+            guardrailRuleId=guardrail_result["ruleId"],
+            language=language
         )
-    # Placeholder: embedding = []
-    embedding = []
+
+    # Generate embedding for user message
+    from app.services.embedding import generate_embedding
+    embedding = await generate_embedding(user_message, app["googleApiKey"])
     relevant_content = await get_relevant_content(x_app_id, embedding)
     last_msgs = await get_last_messages(x_app_id, session["_id"])
-    prompt = user_message + "\n" + "\n".join([c["content"].get("question", "") + " " + c["content"].get("answer", "") for c in relevant_content])
-    prompt += "\n" + "\n".join([m["message"] for m in last_msgs])
+    # Build prompt with extractedText from relevant documents (PDFs)
+    doc_texts = []
+    for c in relevant_content:
+        if c.get("contentType") == "document":
+            # Prefer extractedText if available, else fallback to content fields
+            if c.get("extractedText"):
+                doc_texts.append(f"Document: {c['extractedText']}")
+            else:
+                doc_texts.append(f"Document: {c['content'].get('filename', '')} {c['content'].get('url', '')}")
+        elif c.get("contentType") == "qa":
+            doc_texts.append(f"Q: {c['content'].get('question', '')}\nA: {c['content'].get('answer', '')}")
+        elif c.get("contentType") == "note":
+            doc_texts.append(f"Note: {c['content'].get('text', '')}")
+        elif c.get("contentType") == "url":
+            doc_texts.append(f"URL: {c['content'].get('url', '')} {c['content'].get('description', '')}")
+    prompt = user_message
+    if doc_texts:
+        prompt += "\n\nContext:\n" + "\n---\n".join(doc_texts)
+    if last_msgs:
+        prompt += "\n\nChat History:\n" + "\n".join([m["message"] for m in last_msgs])
+    logging.info("\n--- LLM Prompt ---\n" + prompt[:2000] + ("..." if len(prompt) > 2000 else "") + "\n--- End Prompt ---\n")
+    logging.info("\n--- LLM Prompt ---\n" + prompt[:2000] + ("..." if len(prompt) > 2000 else "") + "\n--- End Prompt ---\n")
     ai_response = await call_gemma_api(app["googleApiKey"], prompt, model="gemini-1.5-flash")
     if isinstance(ai_response, dict) and ai_response.get("error"):
         # Return a user-friendly error if Gemma API fails
@@ -127,11 +266,12 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
         "timestamp": now,
         "language": language
     })
-    # Update session last active
-    await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"lastActiveAt": now}})
+    # Update session last active and language
+    await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"lastActiveAt": now, "language": language}})
     return ChatMessageResponse(
         sessionId=session["_id"],
         message=ai_response,
         guardrailTriggered=guardrail_result_out["blocked"],
-        guardrailRuleId=guardrail_result_out.get("ruleId")
+        guardrailRuleId=guardrail_result_out.get("ruleId"),
+        language=language
     )

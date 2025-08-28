@@ -1,14 +1,38 @@
 
 from fastapi import APIRouter, HTTPException
 from fastapi import BackgroundTasks
-from app.db import app_content_collection
+from app.db import app_content_collection, app_collection
+import base64
+def decrypt_api_key(enc_key: str) -> str:
+	return base64.b64decode(enc_key.encode()).decode()
+from app.services.embedding import generate_embedding
 
 router = APIRouter(prefix="/api/v1/admin/app/{appId}/train", tags=["Admin Train"])
 
 async def reindex_content(appId: str):
-	# Placeholder for actual re-indexing logic (e.g., re-embedding)
-	# For now, just count the docs to simulate work
-	count = await app_content_collection.count_documents({"appId": appId})
+	app = await app_collection.find_one({"_id": appId})
+	if not app or not app.get("googleApiKey"):
+		return 0
+	google_api_key = decrypt_api_key(app["googleApiKey"])
+	# Fetch all content for this app
+	cursor = app_content_collection.find({"appId": appId})
+	count = 0
+	async for doc in cursor:
+		content_type = doc.get("contentType")
+		content = doc.get("content", {})
+		if content_type == "qa":
+			text = f"{content.get('question', '')} {content.get('answer', '')}"
+		elif content_type == "note":
+			text = content.get("text", "")
+		elif content_type == "url":
+			text = content.get("url", "") + (" " + content.get("description", "") if content.get("description") else "")
+		elif content_type == "document":
+			text = content.get("filename", "") + (" " + content.get("url", "") if content.get("url") else "")
+		else:
+			continue
+		embedding = await generate_embedding(text, google_api_key)
+		await app_content_collection.update_one({"_id": doc["_id"]}, {"$set": {"embedding": embedding}})
+		count += 1
 	return count
 
 @router.post("", response_model=dict)

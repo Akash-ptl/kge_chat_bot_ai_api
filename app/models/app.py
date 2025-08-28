@@ -14,6 +14,10 @@ class AppModel(BaseModel):
     welcomeMessage: Dict[str, str] = Field(
         ..., example={"en": "Welcome!", "es": "¡Bienvenido!"}
     )
+    acknowledgmentMessage: Dict[str, str] = Field(
+        default_factory=lambda: {"en": "You're welcome!"},
+        example={"en": "You're welcome!", "es": "¡De nada!"}
+    )
     defaultLanguage: str = Field(..., example="en")
     availableLanguages: List[str] = Field(..., example=["en", "es"])
     googleApiKey: str = Field(..., example="AIzaSyDVm1IWybAQwb-AtcxwXWd3R5Oww4ZhOkc")

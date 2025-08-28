@@ -1,0 +1,227 @@
+Custom Chatbot API Requirement
+
+Chatbot Platform API & Database Requirements Document
+
+1. Introduction
+This document outlines the functional and non-functional requirements for the Chatbot Platform API and its underlying database. The primary goal is to provide a single platform for managing multiple chatbot applications, enabling administrators to enrich chatbot knowledge bases and facilitating intelligent, session-aware conversations with users via Google Gemma AI. This document specifically focuses on the backend API and database design, excluding front-end user interface considerations.
+
+2. Scope
+The scope of this document is limited to the design and functionality of the API endpoints and the database schema required to support a multi-chatbot platform. This includes:
+● API for managing chatbot content (Q&A, notes, URLs, documents).
+● API for handling user chat requests.
+● Database storage for all application data, content, embeddings, and chat history.
+● Integration points with Google Gemma AI for text generation and embeddings.
+
+3. Key Concepts / Glossary
+● AppId: A unique identifier for each distinct chatbot application managed on the platform.
+● App Admin: A user with privileges to manage the content and settings of one or more specific chatbot applications.
+● Chat User: An end-user interacting with a chatbot application.
+● Q&A: Pre-defined question-and-answer pairs used to inform the chatbot.
+● Notes: Free-form text snippets or articles used as knowledge base content for the chatbot.
+● Website URL: Links to external web pages whose content can be used by the chatbot for information retrieval.
+● Documents: Uploaded files (e.g., PDF, DOCX) whose content can be used by the chatbot.
+● Embedding: A numerical representation of text (e.g., a word, sentence, or document) in a high-dimensional vector space, capturing semantic meaning.
+● Google Gemma AI: The large language model used for generating chat responses and creating embeddings.
+● Google API Key: A unique key associated with a Google Cloud project, used for authenticating and authorizing API requests to Google services, including Google Gemma AI.
+● Chat Session: A continuous conversation between a Chat User and a specific chatbot, uniquely identified by a combination of AppId and SessionId.
+● MongoDB: The NoSQL database chosen for data persistence.
+● Guardrail: A configurable rule or set of rules designed to prevent the chatbot from generating or processing undesirable content, such as offensive language, sensitive information, or off-topic discussions.
+
+4. Use Cases
+
+4.1. App Admin Use Cases
+
+UC-AA-001: Manage App Q&A Content
+● Description: An App Admin can add, view, update, and delete Question & Answer pairs associated with a specific AppId.
+● Actors: App Admin
+● Preconditions: App Admin is authenticated and authorized for the target AppId.
+● Postconditions: Q&A content for the AppId is modified, and corresponding embeddings are updated.
+
+UC-AA-002: Manage App Notes Content
+● Description: An App Admin can add, view, update, and delete free-form notes or textual content associated with a specific AppId.
+● Actors: App Admin
+● Preconditions: App Admin is authenticated and authorized for the target AppId.
+● Postconditions: Notes content for the AppId is modified, and corresponding embeddings are updated.
+
+UC-AA-003: Manage App Website URLs
+● Description: An App Admin can add, view, update, and delete website URLs whose content should be indexed and used by a specific AppId's chatbot.
+● Actors: App Admin
+● Preconditions: App Admin is authenticated and authorized for the target AppId.
+● Postconditions: Website URLs for the AppId are modified, and corresponding content fetching and embedding processes are triggered.
+
+UC-AA-004: Manage App Documents
+● Description: An App Admin can upload, view, and delete documents (e.g., PDF, DOCX) whose content should be indexed and used by a specific AppId's chatbot.
+● Actors: App Admin
+● Preconditions: App Admin is authenticated and authorized for the target AppId.
+● Postconditions: Documents for the AppId are modified, and corresponding content extraction and embedding processes are triggered.
+
+UC-AA-005: Trigger Chatbot Training/Re-indexing
+● Description: An App Admin can explicitly trigger a re-processing or re-indexing of all knowledge base content (Q&A, Notes, URLs, Documents) for a given AppId, ensuring that the latest information is fully available and optimized for the Google Gemma AI. This is useful after significant bulk updates or to ensure consistency.
+● Actors: App Admin
+● Preconditions: App Admin is authenticated and authorized for the target AppId.
+● Postconditions: All knowledge base content for the specified AppId is re-embedded and re-indexed.
+
+UC-AA-006: Configure Chatbot Guardrails
+● Description: An App Admin can define and manage rules (guardrails) for a specific AppId to control chatbot behavior, such as preventing responses to certain topics or filtering out inappropriate language.
+● Actors: App Admin
+● Preconditions: App Admin is authenticated and authorized for the target AppId.
+● Postconditions: Guardrail configurations for the AppId are updated and become active for subsequent chat interactions.
+
+4.2. Chat User Use Cases
+
+UC-CU-001: Initiate Chat Session
+● Description: A Chat User sends the first message to a chatbot for a specific AppId, initiating a new chat session. The system assigns a unique SessionId if not provided, and sends a configured welcome message.
+● Actors: Chat User
+● Preconditions: None.
+● Postconditions: A new chat session is created, a unique SessionId is assigned (if not existing), the welcome message is sent, and the first message is processed.
+
+UC-CU-002: Send Chat Message
+● Description: A Chat User sends a message within an ongoing chat session for a specific AppId. The system processes the message, applies guardrails, retrieves relevant context and chat history, sends it to Google Gemma AI, and returns the AI's response after applying guardrails again.
+● Actors: Chat User
+● Preconditions: An active chat session exists for the AppId and SessionId.
+● Postconditions: Chat message is processed, AI response is returned, and the conversation is stored in history.
+
+UC-CU-003: Switch Chat Language
+● Description: A Chat User can explicitly request to switch the language of the conversation. The chatbot should confirm the language switch and respond in the newly selected language.
+● Actors: Chat User
+● Preconditions: An active chat session exists for the AppId and SessionId.
+● Postconditions: The session's language preference is updated, and subsequent chatbot responses are in the new language.
+
+5. Functional Requirements (FRs)
+
+5.1. Multi-App Management
+FR-1.1: The API MUST support the management of multiple distinct chatbot applications from a single backend platform.
+FR-1.2: Each API request related to specific application data MUST include a valid AppId provided via an API header (e.g., X-App-ID).
+
+5.2. Content Management (for App Admin)
+FR-2.1: The API MUST provide endpoints for App Admins to perform Create, Read, Update, and Delete (CRUD) operations on Q&A pairs for a given AppId.
+FR-2.2: The API MUST provide endpoints for App Admins to perform CRUD operations on Notes for a given AppId.
+FR-2.3: The API MUST provide endpoints for App Admins to perform CRUD operations on Website URLs for a given AppId.
+FR-2.4: The API MUST provide endpoints for App Admins to upload and delete Documents for a given AppId.
+FR-2.5: Upon creation or update of any content type (Q&A, Notes, URLs, Documents), the system MUST automatically generate embeddings for the text content using the configured Google Gemma embedding framework.
+FR-2.6: Upon deletion of any content type, the system MUST remove the associated content and its embeddings from the database.
+FR-2.7: The API MUST provide an endpoint for App Admins to explicitly trigger the re-embedding and re-indexing of all knowledge base content associated with a specific AppId. This process should be asynchronous and non-blocking for chat requests.
+FR-2.8: The API MUST provide endpoints for App Admins to configure and manage guardrails (e.g., blacklisted phrases, topic restrictions, response filters) for a specific AppId. This configuration should include defining trigger conditions and corresponding actions/responses.
+
+5.3. Embedding and Storage
+FR-3.1: All text content (Q&A, Notes, extracted content from URLs and Documents) MUST be processed to generate vector embeddings using the Google Gemma embedding framework.
+FR-3.2: The generated embeddings MUST be stored in MongoDB, associated with their original content and respective AppId.
+FR-3.3: MongoDB MUST be the sole database used for storing all application data, including content, embeddings, and chat history.
+
+5.4. Chat Request Processing
+FR-4.1: When a chat request is received, the API MUST validate the AppId included in the request headers.
+FR-4.2: For each incoming chat message for a given AppId and SessionId, the system MUST:
+● Apply Input Guardrails: Evaluate the user's message against the AppId's configured input guardrails. If a guardrail is triggered, return the pre-defined guardrail response and log the event.
+● Generate an embedding for the user's message.
+● Perform a similarity search against the stored embeddings of all Q&A, Notes, and content from URLs/Documents associated with that AppId to retrieve the most relevant contextual information.
+● Fetch the last 10 chat conversation turns (user message and AI response) for the current chat session, identified by the SessionId provided in the header.
+
+FR-4.3: The system MUST construct a comprehensive prompt for the Google Gemma AI, including:
+● The user's current message.
+● The retrieved relevant contextual information specific to the AppId.
+● The last 10 chat conversation turns for the current session.
+
+FR-4.4: The constructed prompt MUST be sent to the Google Gemma AI for response generation, utilizing the googleApiKey associated with the AppId.
+FR-4.5: Upon receiving a response from Google Gemma AI, the system MUST apply Output Guardrails: Evaluate the AI's response against the AppId's configured output guardrails. If a guardrail is triggered, modify or block the response as per the guardrail rule (e.g., return a generic message, request re-generation) and log the event.
+FR-4.6: The API MUST return the final, guardrail-filtered Google Gemma AI's generated response to the Chat User.
+FR-4.7: The chatbot MUST send a configurable welcome message (defined per AppId) upon the initiation of a new chat session (i.e., when a chat message is received without a SessionId).
+FR-4.8: The chatbot MUST be capable of recognizing common "thank you" expressions (e.g., "thank you", "thanks") and respond with a pre-defined appropriate acknowledgment. This behavior can be configurable per AppId.
+FR-4.9: The chatbot MUST be able to detect and respond to explicit user requests to change the conversation language (e.g., "Switch to Spanish", "Speak in French").
+FR-4.10: Upon a successful language switch request, the chatbot MUST update the session's language preference and deliver subsequent responses in the newly selected language. This includes welcome messages, guardrail responses, and AI-generated content (assuming Gemma supports multi-language generation).
+FR-4.11: Every API response for chat interactions MUST include the SessionId in the response payload or a designated response header.
+
+5.4.1. Google AI Key Management
+FR-5.4.1.1: Each AppId MUST have a unique googleApiKey stored securely in MongoDB.
+FR-5.4.1.2: The system MUST retrieve and utilize the googleApiKey corresponding to the AppId from the database for all interactions with Google Gemma AI (both for embeddings and response generation).
+
+5.5. Unique Session Management
+FR-5.5.1: For chat requests, the API will first attempt to retrieve a SessionId from an API header (e.g., X-Session-ID). If not provided (e.g., for the first message of a new session), the backend API MUST automatically generate and assign a unique SessionId for the given AppId. This AppId and SessionId combination uniquely identifies the chat session.
+FR-5.5.2: The current conversation language MUST be stored as part of the chat_sessions data.
+
+5.6. Chat History Storage
+FR-6.1: All incoming chat requests (user messages) and outgoing responses (AI messages) MUST be stored in MongoDB.
+FR-6.2: Each stored chat record MUST include the AppId, SessionId, timestamp, message content, and sender role (user/AI).
+FR-6.3: The chat history MUST be queryable to retrieve the last 10 conversation turns for a given SessionId and AppId, ordered by timestamp.
+
+5.7. API Response Handling
+FR-5.7.1: The API MUST handle exceptions gracefully and return custom, developer-friendly error messages that do not expose internal implementation details or sensitive information. Standard HTTP status codes (e.g., 400, 401, 403, 404, 500) MUST be used appropriately.
+
+6. High-Level API Endpoints (Examples)
+
+App Admin Endpoints:
+(All App Admin endpoints will implicitly expect X-App-ID in the request headers for authentication and authorization context.)
+● POST /api/v1/admin/app/{appId}/qa - Add a new Q&A
+● GET /api/v1/admin/app/{appId}/qa - Get all Q&A
+● PUT /api/v1/admin/app/{appId}/qa/{qaId} - Update a Q&A
+● DELETE /api/v1/admin/app/{appId}/qa/{qaId} - Delete a Q&A
+● POST /api/v1/admin/app/{appId}/train - Trigger re-embedding/re-indexing of chatbot knowledge base
+● POST /api/v1/admin/app/{appId}/guardrails - Add a new guardrail rule
+● GET /api/v1/admin/app/{appId}/guardrails - Get all guardrail rules
+● PUT /api/v1/admin/app/{appId}/guardrails/{ruleId} - Update a guardrail rule
+● DELETE /api/v1/admin/app/{appId}/guardrails/{ruleId} - Delete a guardrail rule
+● PUT /api/v1/admin/app/{appId}/settings/welcome-message - Configure welcome message
+● PUT /api/v1/admin/app/{appId}/settings/languages - Configure available languages and default language
+● PUT /api/v1/admin/app/{appId}/settings/google-api-key - Configure Google API Key for the AppId
+● (Similar endpoints for /notes, /urls, /documents)
+
+Chat User Endpoints:
+● POST /api/v1/chat/message - Send a chat message (expects X-App-ID in header, and optionally X-Session-ID in headers. If X-Session-ID is not provided, the backend will generate it.)
+
+7. High-Level Database Schema (MongoDB Collections)
+
+7.1. apps Collection
+● _id: AppId (String, unique identifier for the application)
+● name: (String, e.g., "My Support Bot")
+● description: (String)
+● welcomeMessage: (Object, e.g., { "en": "Hello! How can I help you today?", "es": "¡Hola! ¿En qué puedo ayudarte hoy?" })
+● defaultLanguage: (String, e.g., "en", default language for the app)
+● availableLanguages: (Array of Strings, e.g., ["en", "es", "fr"])
+● googleApiKey: (String, Sensitive: MUST be encrypted at rest)
+● createdAt: (Date)
+● updatedAt: (Date)
+
+7.2. app_content Collection (Unified Content Storage)
+● _id: (ObjectId)
+● appId: (String, foreign key to apps._id)
+● contentType: (String, e.g., "qa", "note", "url", "document")
+● content: (Object/String, depending on contentType)
+  ○ For qa: { question: "...", answer: "...", language: "en" }
+  ○ For note: { text: "...", language: "en" }
+  ○ For url: { url: "...", extractedText: "...", language: "en" }
+  ○ For document: { documentId: "...", filename: "...", extractedText: "...", language: "en" }
+● embedding: (Array of Numbers, the Gemma embedding vector)
+● sourceRef: (String, optional, e.g., URL for content extracted from web, or file path for document)
+● createdAt: (Date)
+● updatedAt: (Date)
+
+7.3. app_guardrails Collection (New Collection for Guardrails)
+● _id: (ObjectId)
+● appId: (String, foreign key to apps._id)
+● ruleName: (String, descriptive name for the rule)
+● ruleType: (String, e.g., "blacklist_phrase", "topic_restriction", "response_filter")
+● pattern: (String/Regex, the condition to trigger the guardrail)
+● action: (String, e.g., "block_input", "override_response", "log_only")
+● responseMessage: (Object, e.g., { "en": "I cannot discuss that topic.", "es": "No puedo hablar de ese tema." })
+● isActive: (Boolean, indicates if the rule is active)
+● createdAt: (Date)
+● updatedAt: (Date)
+
+7.4. chat_sessions Collection
+● _id: SessionId (String, unique identifier for a chat session)
+● appId: (String, foreign key to apps._id)
+● startedAt: (Date)
+● lastActiveAt: (Date)
+● status: (String, e.g., "active", "completed")
+● language: (String, e.g., "en", current language of the session)
+
+7.5. chat_messages Collection
+● _id: (ObjectId)
+● appId: (String, foreign key to apps._id)
+● sessionId: (String, foreign key to chat_sessions._id)
+● sender: (String, "user" or "ai")
+● message: (String, the actual chat message)
+● timestamp: (Date)
+● language: (String, e.g., "en", language of the message)
+● embedding: (Array of Numbers, optional, for user messages for similarity search if needed)
+● guardrailTriggered: (Boolean, optional, true if a guardrail was triggered by this message/response)
+● guardrailRuleId: (ObjectId, optional, reference to app_guardrails._id if a guardrail was triggered)

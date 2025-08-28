@@ -1,7 +1,14 @@
 
 
 from fastapi import APIRouter, HTTPException, Body
-from app.db import app_content_collection
+from app.db import app_content_collection, app_collection
+import base64
+def decrypt_api_key(enc_key: str) -> str:
+	try:
+		return base64.b64decode(enc_key.encode()).decode()
+	except Exception:
+		return enc_key
+from app.services.embedding import generate_embedding
 from ...models.content import NoteContent
 from typing import List
 import uuid
@@ -19,11 +26,22 @@ def to_dict(obj):
 # POST /api/v1/admin/app/{appId}/notes
 @router.post("", response_model=dict)
 async def create_note(appId: str, note: NoteContent = Body(...)):
+	app = await app_collection.find_one({"_id": appId})
+	if not app or not app.get("googleApiKey"):
+		raise HTTPException(status_code=400, detail="App or Google API key not found")
+	text = note.text
+	api_key = decrypt_api_key(app["googleApiKey"])
+	try:
+		embedding = await generate_embedding(text, api_key)
+	except Exception as e:
+		# Raise HTTPException so FastAPI returns a JSON error response
+		raise HTTPException(status_code=500, detail=f"Embedding error: {str(e)}")
 	doc = {
 		"_id": str(uuid.uuid4()),
 		"appId": appId,
 		"contentType": "note",
 		"content": note.dict(),
+		"embedding": embedding
 	}
 	result = await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
@@ -37,9 +55,15 @@ async def list_notes(appId: str):
 # PUT /api/v1/admin/app/{appId}/notes/{noteId}
 @router.put("/{noteId}", response_model=dict)
 async def update_note(appId: str, noteId: str, note: NoteContent = Body(...)):
+	app = await app_collection.find_one({"_id": appId})
+	if not app or not app.get("googleApiKey"):
+		raise HTTPException(status_code=400, detail="App or Google API key not found")
+	text = note.text
+	api_key = decrypt_api_key(app["googleApiKey"])
+	embedding = await generate_embedding(text, api_key)
 	update_result = await app_content_collection.update_one(
 		{"_id": noteId, "contentType": "note", "appId": appId},
-		{"$set": {"content": note.dict()}}
+		{"$set": {"content": note.dict(), "embedding": embedding}}
 	)
 	if update_result.modified_count == 0:
 		raise HTTPException(status_code=404, detail="Note not found or data unchanged")
@@ -48,6 +72,7 @@ async def update_note(appId: str, noteId: str, note: NoteContent = Body(...)):
 # DELETE /api/v1/admin/app/{appId}/notes/{noteId}
 @router.delete("/{noteId}", response_model=dict)
 async def delete_note(appId: str, noteId: str):
+	# Remove the document and its embedding
 	delete_result = await app_content_collection.delete_one({"_id": noteId, "contentType": "note", "appId": appId})
 	if delete_result.deleted_count == 0:
 		raise HTTPException(status_code=404, detail="Note not found")

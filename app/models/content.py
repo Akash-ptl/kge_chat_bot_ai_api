@@ -44,10 +44,19 @@ class URLContent(BaseModel):
 		}
 
 class DocumentContent(BaseModel):
-	filename: str
-	filetype: str
+	filename: Optional[str] = None
+	filetype: Optional[str] = None
 	url: Optional[str] = None
+	file: Optional[bytes] = None  # base64-encoded file content (for API)
 	language: str
+
+	@classmethod
+	def validate_document(cls, values):
+		url = values.get('url')
+		file = values.get('file')
+		if not url and not file:
+			raise ValueError('Either file or url must be provided')
+		return values
 
 	class Config:
 		schema_extra = {
@@ -55,9 +64,14 @@ class DocumentContent(BaseModel):
 				"filename": "requirements.txt",
 				"filetype": "text/plain",
 				"url": "https://example.com/requirements.txt",
+				"file": None,
 				"language": "en"
 			}
 		}
+
+	# Pydantic root validator
+	from pydantic import root_validator
+	_validate = root_validator(pre=True, allow_reuse=True)(validate_document)
 
 class AppContentModel(BaseModel):
 	id: Optional[str] = Field(alias="_id", default=None)
