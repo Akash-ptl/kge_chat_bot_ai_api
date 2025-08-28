@@ -93,22 +93,28 @@ async def get_relevant_content(app_id: str, embedding: list, limit: int = 5):
     from numpy import dot
     from numpy.linalg import norm
     import numpy as np
-    if not embedding:
-        # fallback: fetch most recent
+    # Always include all Q&A, Note, and URL entries for the app
+    qnas = await app_content_collection.find({"appId": app_id, "contentType": "qa"}).to_list(100)
+    notes = await app_content_collection.find({"appId": app_id, "contentType": "note"}).to_list(100)
+    urls = await app_content_collection.find({"appId": app_id, "contentType": "url"}).to_list(100)
+    # For documents, use similarity search
+    docs = []
+    if embedding:
+        doc_candidates = await app_content_collection.find({"appId": app_id, "contentType": "document", "embedding": {"$exists": True}}).to_list(100)
+        scored = []
+        emb = np.array(embedding)
+        for d in doc_candidates:
+            doc_emb = np.array(d.get("embedding", []))
+            if doc_emb.size == 0:
+                continue
+            sim = float(dot(emb, doc_emb) / (norm(emb) * norm(doc_emb) + 1e-8))
+            scored.append((sim, d))
+        scored.sort(reverse=True, key=lambda x: x[0])
+        docs = [d for sim, d in scored[:limit]]
+    else:
         docs = await app_content_collection.find({"appId": app_id, "contentType": "document"}).sort("updatedAt", -1).to_list(limit)
-        return docs
-    # Fetch all document embeddings for this app
-    docs = await app_content_collection.find({"appId": app_id, "contentType": "document", "embedding": {"$exists": True}}).to_list(100)
-    scored = []
-    emb = np.array(embedding)
-    for d in docs:
-        doc_emb = np.array(d.get("embedding", []))
-        if doc_emb.size == 0:
-            continue
-        sim = float(dot(emb, doc_emb) / (norm(emb) * norm(doc_emb) + 1e-8))
-        scored.append((sim, d))
-    scored.sort(reverse=True, key=lambda x: x[0])
-    return [d for sim, d in scored[:limit]]
+    # Combine all for context
+    return qnas + notes + urls + docs
 
 async def get_last_messages(app_id: str, session_id: str, limit: int = 10):
     msgs = await chat_messages_collection.find({"appId": app_id, "sessionId": session_id}).sort("timestamp", -1).to_list(limit)
@@ -218,36 +224,98 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
     embedding = await generate_embedding(user_message, app["googleApiKey"])
     relevant_content = await get_relevant_content(x_app_id, embedding)
     last_msgs = await get_last_messages(x_app_id, session["_id"])
-    # Build prompt with extractedText from relevant documents (PDFs)
-    doc_texts = []
+
+    # Direct retrieval for QnA, Note, URL
+    ai_response = None
+    import numpy as np
+    # QnA: exact match
     for c in relevant_content:
-        if c.get("contentType") == "document":
-            # Prefer extractedText if available, else fallback to content fields
-            if c.get("extractedText"):
-                doc_texts.append(f"Document: {c['extractedText']}")
-            else:
-                doc_texts.append(f"Document: {c['content'].get('filename', '')} {c['content'].get('url', '')}")
-        elif c.get("contentType") == "qa":
-            doc_texts.append(f"Q: {c['content'].get('question', '')}\nA: {c['content'].get('answer', '')}")
-        elif c.get("contentType") == "note":
-            doc_texts.append(f"Note: {c['content'].get('text', '')}")
-        elif c.get("contentType") == "url":
-            doc_texts.append(f"URL: {c['content'].get('url', '')} {c['content'].get('description', '')}")
-    prompt = user_message
-    if doc_texts:
-        prompt += "\n\nContext:\n" + "\n---\n".join(doc_texts)
-    if last_msgs:
-        prompt += "\n\nChat History:\n" + "\n".join([m["message"] for m in last_msgs])
-    logging.info("\n--- LLM Prompt ---\n" + prompt[:2000] + ("..." if len(prompt) > 2000 else "") + "\n--- End Prompt ---\n")
-    logging.info("\n--- LLM Prompt ---\n" + prompt[:2000] + ("..." if len(prompt) > 2000 else "") + "\n--- End Prompt ---\n")
-    ai_response = await call_gemma_api(app["googleApiKey"], prompt, model="gemini-1.5-flash")
-    if isinstance(ai_response, dict) and ai_response.get("error"):
-        # Return a user-friendly error if Gemma API fails
-        raise HTTPException(status_code=502, detail=ai_response)
-    # Output guardrails
-    guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
-    if guardrail_result_out["blocked"]:
-        ai_response = guardrail_result_out["message"]
+        if c.get("contentType") == "qa":
+            q = c["content"].get("question", "").strip().lower()
+            a = c["content"].get("answer", "")
+            if user_message.strip().lower() == q:
+                ai_response = a
+                break
+    # Note: semantic similarity (embedding)
+    best_note = None
+    best_sim = -1
+    if ai_response is None:
+        for c in relevant_content:
+            if c.get("contentType") == "note" and c.get("embedding"):
+                note_emb = np.array(c["embedding"])
+                user_emb = np.array(embedding)
+                if note_emb.size and user_emb.size:
+                    sim = float(np.dot(user_emb, note_emb) / (np.linalg.norm(user_emb) * np.linalg.norm(note_emb) + 1e-8))
+                    if sim > best_sim:
+                        best_sim = sim
+                        best_note = c
+        # If similarity is high enough, use the note text directly
+        if best_note and best_sim > 0.7:
+            ai_response = best_note["content"].get("text", "")
+    # URL: match description or url
+    if ai_response is None:
+        for c in relevant_content:
+            if c.get("contentType") == "url":
+                desc = c["content"].get("description", "").strip().lower()
+                url_val = c["content"].get("url", "")
+                if desc and desc in user_message.strip().lower():
+                    ai_response = url_val
+                    break
+                if url_val and url_val in user_message:
+                    ai_response = url_val
+                    break
+    # Fallback: LLM for docs or if no direct match
+    if ai_response is None:
+        qna_context = []
+        note_context = []
+        url_context = []
+        doc_context = []
+        # For notes, highlight the most relevant note (if any)
+        for c in relevant_content:
+            if c.get("contentType") == "qa":
+                qna_context.append(f"Q: {c['content'].get('question', '')}\nA: {c['content'].get('answer', '')}")
+            elif c.get("contentType") == "note":
+                note_text = c['content'].get('text', '')
+                if best_note and c == best_note and best_sim > 0.4:
+                    note_context.append(f"[MOST RELEVANT NOTE]: {note_text}")
+                else:
+                    note_context.append(f"Note: {note_text}")
+            elif c.get("contentType") == "url":
+                url_context.append(f"URL: {c['content'].get('url', '')}\nDescription: {c['content'].get('description', '')}")
+            elif c.get("contentType") == "document":
+                if c.get("extractedText"):
+                    doc_context.append(f"Document: {c['extractedText']}")
+                else:
+                    doc_context.append(f"Document: {c['content'].get('filename', '')} {c['content'].get('url', '')}")
+        prompt = (
+            "You are an expert assistant. Answer the user's question strictly using ONLY the provided context below. "
+            "If the answer is not present, reply 'I don't know based on the provided context.'\n"
+            f"User Question: {user_message}\n"
+        )
+        if qna_context:
+            prompt += "\nQ&A Knowledge Base:\n" + "\n---\n".join(qna_context)
+        if note_context:
+            prompt += "\nNotes:\n" + "\n---\n".join(note_context)
+        if url_context:
+            prompt += "\nURLs:\n" + "\n---\n".join(url_context)
+        if doc_context:
+            prompt += "\nDocuments:\n" + "\n---\n".join(doc_context)
+        if last_msgs:
+            prompt += "\n\nChat History:\n" + "\n".join([m["message"] for m in last_msgs])
+        logging.info("\n--- LLM Prompt ---\n" + prompt[:2000] + ("..." if len(prompt) > 2000 else "") + "\n--- End Prompt ---\n")
+        ai_response = await call_gemma_api(app["googleApiKey"], prompt, model="gemini-1.5-flash")
+        if isinstance(ai_response, dict) and ai_response.get("error"):
+            # Return a user-friendly error if Gemma API fails
+            raise HTTPException(status_code=502, detail=ai_response)
+        # Output guardrails
+        guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
+        if guardrail_result_out["blocked"]:
+            ai_response = guardrail_result_out["message"]
+    else:
+        # Output guardrails for direct answers
+        guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
+        if guardrail_result_out["blocked"]:
+            ai_response = guardrail_result_out["message"]
     # Store message and response
     now = datetime.datetime.utcnow()
     await chat_messages_collection.insert_one({

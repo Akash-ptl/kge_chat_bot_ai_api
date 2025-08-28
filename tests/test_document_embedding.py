@@ -82,14 +82,104 @@ def ask_about_pdf(app_id):
     return resp
 
 def main():
+
     app_id = create_app()
     if not app_id:
         print("App creation failed, aborting test.")
         return
     try:
-        doc_id = upload_pdf(app_id)
-        time.sleep(3)  # Wait for embedding/indexing
-        ask_about_pdf(app_id)
+        headers = {"Content-Type": "application/json", "X-App-ID": app_id}
+        session_id = None
+
+        # Multiple Q&A (unique, paraphrased, and hard)
+        qnas = [
+            {"question": "What is FastAPI?", "answer": "FastAPI is a modern, fast web framework for building APIs with Python.", "language": "en"},
+            {"question": "What is Python?", "answer": "Python is a popular programming language.", "language": "en"}
+        ]
+        qna_url = f"{ADMIN_BASE_URL}/{app_id}/qna"
+        for qna in qnas:
+            resp = requests.post(qna_url, json=qna)
+            print_response("Create QnA", qna_url, qna, resp)
+        time.sleep(1)
+
+        # Multiple Notes (unique, paraphrased, and hard)
+        notes = [
+            {"text": "This is a note about the chatbot system.", "language": "en"},
+            {"text": "This is a second note about AI chatbots.", "language": "en"}
+        ]
+        note_url = f"{ADMIN_BASE_URL}/{app_id}/notes"
+        for note in notes:
+            resp = requests.post(note_url, json=note)
+            print_response("Create Note", note_url, note, resp)
+        time.sleep(1)
+
+        # Multiple URLs (unique, paraphrased, and hard)
+        urls = [
+            {"url": "https://fastapi.tiangolo.com/", "description": "Official FastAPI documentation", "language": "en"},
+            {"url": "https://www.python.org/", "description": "Official Python website", "language": "en"}
+        ]
+        url_url = f"{ADMIN_BASE_URL}/{app_id}/urls"
+        for url in urls:
+            resp = requests.post(url_url, json=url)
+            print_response("Create URL", url_url, url, resp)
+        time.sleep(1)
+
+        # Multiple PDFs
+        pdf_urls = [
+            "https://www.adobe.com/support/products/enterprise/knowledgecenter/media/c4611_sample_explain.pdf",
+            "https://s24.q4cdn.com/216390268/files/doc_downloads/test.pdf"
+        ]
+        for pdf_url in pdf_urls:
+            doc_payload = {
+                "filename": pdf_url.split("/")[-1],
+                "filetype": "application/pdf",
+                "url": pdf_url,
+                "language": "en"
+            }
+            docs_url = f"{ADMIN_BASE_URL}/{app_id}/documents"
+            resp = requests.post(docs_url, headers=headers, json=doc_payload)
+            print_response("Upload PDF Document", docs_url, doc_payload, resp)
+        time.sleep(3)
+
+
+        # Start chat session and ask about each QnA, Note, URL, and PDF with paraphrased/hard queries
+        # QnA
+        payload = {"message": "Can you explain the main features of FastAPI?"}
+        resp_chat = requests.post(CHAT_BASE_URL, headers=headers, json=payload)
+        print_response("Ask QnA1 in Chat (paraphrased)", CHAT_BASE_URL, payload, resp_chat)
+        try:
+            session_id = resp_chat.json().get("sessionId")
+        except Exception:
+            session_id = None
+        if session_id:
+            headers["X-Session-Id"] = session_id
+        payload2 = {"message": "Tell me about the programming language called Python."}
+        resp_chat2 = requests.post(CHAT_BASE_URL, headers=headers, json=payload2)
+        print_response("Ask QnA2 in Chat (paraphrased)", CHAT_BASE_URL, payload2, resp_chat2)
+
+        # Notes
+        payload3 = {"message": "Summarize the note related to the chatbot system."}
+        resp_chat3 = requests.post(CHAT_BASE_URL, headers=headers, json=payload3)
+        print_response("Ask Note1 in Chat (paraphrased)", CHAT_BASE_URL, payload3, resp_chat3)
+        payload4 = {"message": "What does the second note about AI chatbots say?"}
+        resp_chat4 = requests.post(CHAT_BASE_URL, headers=headers, json=payload4)
+        print_response("Ask Note2 in Chat (paraphrased)", CHAT_BASE_URL, payload4, resp_chat4)
+
+        # URLs
+        payload5 = {"message": "Where can I find the official documentation for FastAPI?"}
+        resp_chat5 = requests.post(CHAT_BASE_URL, headers=headers, json=payload5)
+        print_response("Ask URL1 in Chat (paraphrased)", CHAT_BASE_URL, payload5, resp_chat5)
+        payload6 = {"message": "Give me the main website for Python programming."}
+        resp_chat6 = requests.post(CHAT_BASE_URL, headers=headers, json=payload6)
+        print_response("Ask URL2 in Chat (paraphrased)", CHAT_BASE_URL, payload6, resp_chat6)
+
+        # PDFs
+        payload7 = {"message": "What is Features Demonstrated in pdf?"}
+        resp_chat7 = requests.post(CHAT_BASE_URL, headers=headers, json=payload7)
+        print_response("Ask PDF1 in Chat", CHAT_BASE_URL, payload7, resp_chat7)
+        payload8 = {"message": "What is in the PDF document?"}
+        resp_chat8 = requests.post(CHAT_BASE_URL, headers=headers, json=payload8)
+        print_response("Ask PDF2 in Chat", CHAT_BASE_URL, payload8, resp_chat8)
     finally:
         delete_app(app_id)
 
