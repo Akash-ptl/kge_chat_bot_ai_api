@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"305841022ba24e6689fa61e53c2ffed2","collectionName":"app_guardrails","type":"collection"}
