@@ -3,7 +3,7 @@ Chatbot Platform API: Deployment & Usage Reference
 
 1. Gemini Model & API Key
 Gemini Model Used: gemini-1.5-flash
-Google API Key Example: AIzaSyDVm1IWybAQwb-AtcxwXWd3R5Oww4ZhOkc
+Google API Key Example: AIzaSyDKzpg3Z8aLmY_lIoXRu7svHpDafmT_DhI
 Each app stores its own API key in the googleApiKey field (encrypted in production).
 Gemini Endpoint: https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=<API_KEY>
 

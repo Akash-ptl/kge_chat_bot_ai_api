@@ -20,6 +20,6 @@ class AppModel(BaseModel):
     )
     defaultLanguage: str = Field(..., example="en")
     availableLanguages: List[str] = Field(..., example=["en", "es"])
-    googleApiKey: str = Field(..., example="AIzaSyDVm1IWybAQwb-AtcxwXWd3R5Oww4ZhOkc")
+    googleApiKey: str = Field(..., example="AIzaSyDKzpg3Z8aLmY_lIoXRu7svHpDafmT_DhI")
     createdAt: datetime = Field(default_factory=datetime.utcnow, example="2025-08-23T12:00:00Z")
     updatedAt: datetime = Field(default_factory=datetime.utcnow, example="2025-08-23T12:00:00Z")

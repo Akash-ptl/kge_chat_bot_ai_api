@@ -15,7 +15,7 @@ def print_response(name, url, resp):
 
 def run_api_tests():
     # 1. Create App
-    GOOGLE_API_KEY = "AIzaSyDVm1IWybAQwb-AtcxwXWd3R5Oww4ZhOkc"
+    GOOGLE_API_KEY = "AIzaSyDKzpg3Z8aLmY_lIoXRu7svHpDafmT_DhI"
     app_data = {
         "name": "Test App",
         "description": "A test app.",
