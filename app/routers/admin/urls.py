@@ -8,7 +8,7 @@ def decrypt_api_key(enc_key: str) -> str:
 		return base64.b64decode(enc_key.encode()).decode()
 	except Exception:
 		return enc_key
-from app.services.embedding import generate_embedding
+from app.utils.helpers import get_valid_api_key, safe_generate_embedding, build_doc_dict
 from ...models.content import URLContent
 from typing import List
 import uuid
@@ -27,18 +27,10 @@ def to_dict(obj):
 @router.post("", response_model=dict)
 async def create_url(app_id: str, url: URLContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	if not app or not app.get("googleApiKey"):
-		raise HTTPException(status_code=400, detail="App or Google API key not found")
+	api_key = await get_valid_api_key(app)
 	text = url.url + (" " + url.description if url.description else "")
-	api_key = decrypt_api_key(app["googleApiKey"])
-	embedding = await generate_embedding(text, api_key)
-	doc = {
-		"_id": str(uuid.uuid4()),
-		"app_id": app_id,
-		"contentType": "url",
-		"content": url.dict(),
-		"embedding": embedding
-	}
+	embedding = await safe_generate_embedding(text, api_key)
+	doc = build_doc_dict(app_id, "url", url.dict(), embedding)
 	await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
@@ -52,11 +44,9 @@ async def list_urls(app_id: str):
 @router.put("/{url_id}", response_model=dict)
 async def update_url(app_id: str, url_id: str, url: URLContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	if not app or not app.get("googleApiKey"):
-		raise HTTPException(status_code=400, detail="App or Google API key not found")
+	api_key = await get_valid_api_key(app)
 	text = url.url + (" " + url.description if url.description else "")
-	api_key = decrypt_api_key(app["googleApiKey"])
-	embedding = await generate_embedding(text, api_key)
+	embedding = await safe_generate_embedding(text, api_key)
 	update_result = await app_content_collection.update_one(
 		{"_id": url_id, "contentType": "url", "app_id": app_id},
 		{"$set": {"content": url.dict(), "embedding": embedding}}

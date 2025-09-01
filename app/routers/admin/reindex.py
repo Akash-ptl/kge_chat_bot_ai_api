@@ -5,15 +5,16 @@ from app.db import app_content_collection, app_collection
 import base64
 def decrypt_api_key(enc_key: str) -> str:
 	return base64.b64decode(enc_key.encode()).decode()
-from app.services.embedding import generate_embedding
+from app.utils.helpers import get_valid_api_key, safe_generate_embedding
 
 router = APIRouter(prefix="/api/v1/admin/app/{app_id}/train", tags=["Admin Train"])
 
 async def reindex_content(app_id: str):
 	app = await app_collection.find_one({"_id": app_id})
-	if not app or not app.get("googleApiKey"):
+	try:
+		google_api_key = await get_valid_api_key(app)
+	except HTTPException:
 		return 0
-	google_api_key = decrypt_api_key(app["googleApiKey"])
 	# Fetch all content for this app
 	cursor = app_content_collection.find({"app_id": app_id})
 	count = 0
@@ -30,9 +31,9 @@ async def reindex_content(app_id: str):
 			text = content.get("filename", "") + (" " + content.get("url", "") if content.get("url") else "")
 		else:
 			continue
-		embedding = await generate_embedding(text, google_api_key)
-		await app_content_collection.update_one({"_id": doc["_id"]}, {"$set": {"embedding": embedding}})
-		count += 1
+	embedding = await safe_generate_embedding(text, google_api_key)
+	await app_content_collection.update_one({"_id": doc["_id"]}, {"$set": {"embedding": embedding}})
+	count += 1
 	return count
 
 @router.post("", response_model=dict)

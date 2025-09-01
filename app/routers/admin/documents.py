@@ -8,7 +8,7 @@ def decrypt_api_key(enc_key: str) -> str:
 		return base64.b64decode(enc_key.encode()).decode()
 	except Exception:
 		return enc_key
-from app.services.embedding import generate_embedding
+from app.utils.helpers import get_valid_api_key, safe_generate_embedding, build_doc_dict
 import PyPDF2
 import aiofiles
 import httpx
@@ -31,9 +31,7 @@ def to_dict(obj):
 @router.post("", response_model=dict)
 async def create_document(app_id: str, document: DocumentContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	if not app or not app.get("googleApiKey"):
-		raise HTTPException(status_code=400, detail="App or Google API key not found")
-	api_key = decrypt_api_key(app["googleApiKey"])
+	api_key = await get_valid_api_key(app)
 
 	extracted_text = None
 	import tempfile
@@ -72,15 +70,8 @@ async def create_document(app_id: str, document: DocumentContent = Body(...)):
 	if not extracted_text or not extracted_text.strip():
 		raise HTTPException(status_code=400, detail="No text could be extracted from the PDF.")
 
-	embedding = await generate_embedding(extracted_text, api_key)
-	doc = {
-		"_id": str(uuid.uuid4()),
-		"app_id": app_id,
-		"contentType": "document",
-		"content": document.dict(),
-		"embedding": embedding,
-		"extractedText": extracted_text[:10000]  # Store up to 10k chars for reference
-	}
+	embedding = await safe_generate_embedding(extracted_text, api_key)
+	doc = build_doc_dict(app_id, "document", document.dict(), embedding, extra={"extractedText": extracted_text[:10000]})
 	await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
@@ -131,17 +122,15 @@ async def extract_pdf_text(document: DocumentContent) -> str:
 @router.put("/{document_id}", response_model=dict)
 async def update_document(app_id: str, document_id: str, document: DocumentContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	if not app or not app.get("googleApiKey"):
-		raise HTTPException(status_code=400, detail="App or Google API key not found")
-	api_key = decrypt_api_key(app["googleApiKey"])
+	api_key = await get_valid_api_key(app)
 
 	extracted_text = await extract_pdf_text(document)
 	if not extracted_text or not extracted_text.strip():
 		raise HTTPException(status_code=400, detail="No text could be extracted from the PDF.")
 
-	embedding = await generate_embedding(extracted_text, api_key)
+	embedding = await safe_generate_embedding(extracted_text, api_key)
 	update_result = await app_content_collection.update_one(
-			   {"_id": document_id, "contentType": "document", "app_id": app_id},
+		{"_id": document_id, "contentType": "document", "app_id": app_id},
 		{"$set": {"content": document.dict(), "embedding": embedding, "extractedText": extracted_text[:10000]}}
 	)
 	if update_result.modified_count == 0:
