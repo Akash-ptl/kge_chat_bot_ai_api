@@ -1,3 +1,41 @@
+import aiofiles
+import PyPDF2
+import httpx
+from fastapi import HTTPException
+
+async def extract_pdf_text_from_document(document):
+	import tempfile
+	import os
+	import base64
+	if document.file:
+		file_bytes = base64.b64decode(document.file)
+		async with aiofiles.tempfile.NamedTemporaryFile('wb+', delete=True, suffix='.pdf') as tmp:
+			await tmp.write(file_bytes)
+			await tmp.flush()
+			try:
+				await tmp.seek(0)
+				reader = PyPDF2.PdfReader(tmp.name)
+				return " ".join([page.extract_text() or "" for page in reader.pages])
+			except Exception:
+				raise HTTPException(status_code=400, detail="Failed to extract PDF text")
+	elif document.url:
+		try:
+			async with httpx.AsyncClient() as client:
+				resp = await client.get(document.url)
+				resp.raise_for_status()
+				async with aiofiles.tempfile.NamedTemporaryFile('wb+', delete=True, suffix='.pdf') as tmp:
+					await tmp.write(resp.content)
+					await tmp.flush()
+					try:
+						await tmp.seek(0)
+						reader = PyPDF2.PdfReader(tmp.name)
+						return " ".join([page.extract_text() or "" for page in reader.pages])
+					except Exception:
+						raise HTTPException(status_code=400, detail="Failed to extract PDF text from URL")
+		except Exception:
+			raise HTTPException(status_code=400, detail="Failed to download PDF")
+	else:
+		raise HTTPException(status_code=400, detail="Either file or url must be provided.")
 from fastapi import HTTPException
 
 async def get_valid_api_key(app):

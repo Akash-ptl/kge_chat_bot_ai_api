@@ -9,9 +9,7 @@ def decrypt_api_key(enc_key: str) -> str:
 	except Exception:
 		return enc_key
 from app.utils.helpers import get_valid_api_key, safe_generate_embedding, build_doc_dict
-import PyPDF2
-import aiofiles
-import httpx
+from app.utils.helpers import extract_pdf_text_from_document
 from ...models.content import DocumentContent
 from typing import List
 import uuid
@@ -33,43 +31,9 @@ async def create_document(app_id: str, document: DocumentContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
 	api_key = await get_valid_api_key(app)
 
-	extracted_text = None
-	import tempfile
-	import os
-	if document.file:
-		import base64
-		file_bytes = base64.b64decode(document.file)
-		async with aiofiles.tempfile.NamedTemporaryFile('wb+', delete=True, suffix='.pdf') as tmp:
-			await tmp.write(file_bytes)
-			await tmp.flush()
-			try:
-				await tmp.seek(0)
-				reader = PyPDF2.PdfReader(tmp.name)
-				extracted_text = " ".join([page.extract_text() or "" for page in reader.pages])
-			except Exception:
-				raise HTTPException(status_code=400, detail="Failed to extract PDF text")
-	elif document.url:
-		try:
-			async with httpx.AsyncClient() as client:
-				resp = await client.get(document.url)
-				resp.raise_for_status()
-				async with aiofiles.tempfile.NamedTemporaryFile('wb+', delete=True, suffix='.pdf') as tmp:
-					await tmp.write(resp.content)
-					await tmp.flush()
-					try:
-						await tmp.seek(0)
-						reader = PyPDF2.PdfReader(tmp.name)
-						extracted_text = " ".join([page.extract_text() or "" for page in reader.pages])
-					except Exception:
-						raise HTTPException(status_code=400, detail="Failed to extract PDF text from URL")
-		except Exception:
-			raise HTTPException(status_code=400, detail="Failed to download PDF")
-	else:
-		raise HTTPException(status_code=400, detail="Either file or url must be provided.")
-
+	extracted_text = await extract_pdf_text_from_document(document)
 	if not extracted_text or not extracted_text.strip():
 		raise HTTPException(status_code=400, detail="No text could be extracted from the PDF.")
-
 	embedding = await safe_generate_embedding(extracted_text, api_key)
 	doc = build_doc_dict(app_id, "document", document.dict(), embedding, extra={"extractedText": extracted_text[:10000]})
 	await app_content_collection.insert_one(doc)
@@ -84,39 +48,6 @@ async def list_documents(app_id: str):
 
 # PUT /api/v1/admin/app/{app_id}/documents/{document_id}
 
-async def extract_pdf_text(document: DocumentContent) -> str:
-	import tempfile
-	import os
-	import base64
-	if document.file:
-		file_bytes = base64.b64decode(document.file)
-		async with aiofiles.tempfile.NamedTemporaryFile('wb+', delete=True, suffix='.pdf') as tmp:
-			await tmp.write(file_bytes)
-			await tmp.flush()
-			try:
-				await tmp.seek(0)
-				reader = PyPDF2.PdfReader(tmp.name)
-				return " ".join([page.extract_text() or "" for page in reader.pages])
-			except Exception:
-				raise HTTPException(status_code=400, detail="Failed to extract PDF text")
-	elif document.url:
-		try:
-			async with httpx.AsyncClient() as client:
-				resp = await client.get(document.url)
-				resp.raise_for_status()
-				async with aiofiles.tempfile.NamedTemporaryFile('wb+', delete=True, suffix='.pdf') as tmp:
-					await tmp.write(resp.content)
-					await tmp.flush()
-					try:
-						await tmp.seek(0)
-						reader = PyPDF2.PdfReader(tmp.name)
-						return " ".join([page.extract_text() or "" for page in reader.pages])
-					except Exception:
-						raise HTTPException(status_code=400, detail="Failed to extract PDF text from URL")
-		except Exception:
-			raise HTTPException(status_code=400, detail="Failed to download PDF")
-	else:
-		raise HTTPException(status_code=400, detail="Either file or url must be provided.")
 
 
 @router.put("/{document_id}", response_model=dict)
@@ -124,7 +55,7 @@ async def update_document(app_id: str, document_id: str, document: DocumentConte
 	app = await app_collection.find_one({"_id": app_id})
 	api_key = await get_valid_api_key(app)
 
-	extracted_text = await extract_pdf_text(document)
+	extracted_text = await extract_pdf_text_from_document(document)
 	if not extracted_text or not extracted_text.strip():
 		raise HTTPException(status_code=400, detail="No text could be extracted from the PDF.")
 

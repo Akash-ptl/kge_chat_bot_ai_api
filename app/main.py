@@ -34,7 +34,7 @@ app.include_router(admin_settings_router.router)
 app.include_router(chat_router.router)
 
 @app.get("/")
-async def root():
+def root():
     return {"message": "Chatbot API is running"}
 
 
