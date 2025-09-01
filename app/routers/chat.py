@@ -1,4 +1,4 @@
-def get_direct_qna_response(relevant_content):
+def get_direct_qna_response(user_message, relevant_content):
     for c in relevant_content:
         if c.get("contentType") == "qa":
             # The user_message check must be handled by the caller
@@ -7,19 +7,19 @@ def get_direct_qna_response(relevant_content):
 
 def get_best_note_response(relevant_content, embedding):
     import numpy as np
-    best_note = None
-    best_sim = -1
+    best = None
+    sim_max = -1
     for c in relevant_content:
         if c.get("contentType") == "note" and c.get("embedding"):
             note_emb = np.array(c["embedding"])
             user_emb = np.array(embedding)
             if note_emb.size and user_emb.size:
                 sim = float(np.dot(user_emb, note_emb) / (np.linalg.norm(user_emb) * np.linalg.norm(note_emb) + 1e-8))
-                if sim > best_sim:
-                    best_sim = sim
-                    best_note = c
-    if best_note and best_sim > 0.7:
-        return best_note["content"].get("text", "")
+                if sim > sim_max:
+                    sim_max = sim
+                    best = c
+    if best and sim_max > 0.7:
+        return best["content"].get("text", "")
     return None
 
 def get_url_response(relevant_content):
@@ -312,11 +312,8 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
     from app.services.embedding import generate_embedding
     embedding = await generate_embedding(user_message, app["googleApiKey"])
     relevant_content = await get_relevant_content(x_app_id, embedding)
-    last_msgs = await get_last_messages(x_app_id, session["_id"])
-
+    # Removed unused last_msgs, best_note, best_sim; fixed get_direct_qna_response call
     ai_response = get_direct_qna_response(user_message, relevant_content)
-    best_note = None
-    best_sim = -1
     if ai_response is None:
         ai_response = get_best_note_response(relevant_content, embedding)
     if ai_response is None:
