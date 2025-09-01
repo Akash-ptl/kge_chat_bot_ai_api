@@ -278,9 +278,7 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
             language=language
         )
 
-    # Generate embedding for user message
-    from app.services.embedding import generate_embedding
-    embedding = await generate_embedding(user_message, app["googleApiKey"])
+    # Generate embedding for user message (embedding variable is now unused and removed)
     relevant_content = await get_relevant_content(x_app_id)
     # Removed unused last_msgs, best_note, best_sim; fixed get_direct_qna_response call
     ai_response = get_direct_qna_response(user_message, relevant_content)
