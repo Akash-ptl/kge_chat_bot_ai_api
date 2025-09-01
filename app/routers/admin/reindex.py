@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/v1/admin/app/{app_id}/train", tags=["Admin Train
 async def reindex_content(app_id: str):
 	app = await app_collection.find_one({"_id": app_id})
 	try:
-		google_api_key = await get_valid_api_key(app)
+		google_api_key = get_valid_api_key(app)
 	except HTTPException:
 		return 0
 	# Fetch all content for this app

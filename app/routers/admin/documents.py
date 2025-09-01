@@ -29,7 +29,7 @@ def to_dict(obj):
 @router.post("", response_model=dict)
 async def create_document(app_id: str, document: DocumentContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	api_key = await get_valid_api_key(app)
+	api_key = get_valid_api_key(app)
 
 	extracted_text = await extract_pdf_text_from_document(document)
 	if not extracted_text or not extracted_text.strip():
@@ -53,7 +53,7 @@ async def list_documents(app_id: str):
 @router.put("/{document_id}", response_model=dict)
 async def update_document(app_id: str, document_id: str, document: DocumentContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	api_key = await get_valid_api_key(app)
+	api_key = get_valid_api_key(app)
 
 	extracted_text = await extract_pdf_text_from_document(document)
 	if not extracted_text or not extracted_text.strip():

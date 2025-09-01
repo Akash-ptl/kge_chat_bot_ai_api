@@ -38,7 +38,7 @@ async def extract_pdf_text_from_document(document):
 		raise HTTPException(status_code=400, detail="Either file or url must be provided.")
 from fastapi import HTTPException
 
-async def get_valid_api_key(app):
+def get_valid_api_key(app):
 	if not app or not app.get("googleApiKey"):
 		raise HTTPException(status_code=400, detail="App or Google API key not found")
 	from app.routers.admin.urls import decrypt_api_key  # adjust import if needed

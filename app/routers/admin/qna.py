@@ -26,7 +26,7 @@ def to_dict(obj):
 @router.post("", response_model=dict)
 async def create_qna(app_id: str, qna: QnAContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	api_key = await get_valid_api_key(app)
+	api_key = get_valid_api_key(app)
 	text = f"{qna.question} {qna.answer}"
 	embedding = await safe_generate_embedding(text, api_key)
 	doc = build_doc_dict(app_id, "qa", qna.dict(), embedding)
@@ -41,7 +41,7 @@ async def list_qna(app_id: str):
 @router.put("/{qa_id}", response_model=dict)
 async def update_qna(app_id: str, qa_id: str, qna: QnAContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	api_key = await get_valid_api_key(app)
+	api_key = get_valid_api_key(app)
 	text = f"{qna.question} {qna.answer}"
 	embedding = await safe_generate_embedding(text, api_key)
 	update_result = await app_content_collection.update_one(

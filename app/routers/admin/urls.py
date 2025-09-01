@@ -27,7 +27,7 @@ def to_dict(obj):
 @router.post("", response_model=dict)
 async def create_url(app_id: str, url: URLContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	api_key = await get_valid_api_key(app)
+	api_key = get_valid_api_key(app)
 	text = url.url + (" " + url.description if url.description else "")
 	embedding = await safe_generate_embedding(text, api_key)
 	doc = build_doc_dict(app_id, "url", url.dict(), embedding)
@@ -44,7 +44,7 @@ async def list_urls(app_id: str):
 @router.put("/{url_id}", response_model=dict)
 async def update_url(app_id: str, url_id: str, url: URLContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
-	api_key = await get_valid_api_key(app)
+	api_key = get_valid_api_key(app)
 	text = url.url + (" " + url.description if url.description else "")
 	embedding = await safe_generate_embedding(text, api_key)
 	update_result = await app_content_collection.update_one(
