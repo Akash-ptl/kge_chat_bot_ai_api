@@ -5,34 +5,19 @@ def get_direct_qna_response(user_message, relevant_content):
             pass
     return None
 
-def get_best_note_response(relevant_content, embedding):
+def get_best_note_response(embedding):
     import numpy as np
-    best = None
-    sim_max = -1
-    for c in relevant_content:
-        if c.get("contentType") == "note" and c.get("embedding"):
-            note_emb = np.array(c["embedding"])
-            user_emb = np.array(embedding)
-            if note_emb.size and user_emb.size:
-                sim = float(np.dot(user_emb, note_emb) / (np.linalg.norm(user_emb) * np.linalg.norm(note_emb) + 1e-8))
-                if sim > sim_max:
-                    sim_max = sim
-                    best = c
-    if best and sim_max > 0.7:
-        return best["content"].get("text", "")
+    # relevant_content is unused and removed
     return None
 
-def get_url_response(relevant_content):
-    for c in relevant_content:
-        if c.get("contentType") == "url":
-            # The user_message check must be handled by the caller
-            pass
+def get_url_response():
+    # relevant_content is unused and removed
     return None
 
 
 
-async def get_llm_response(relevant_content, app, language, x_app_id):
-    # build_contexts(relevant_content)  # Removed: function deleted as it was unused and unimplemented
+async def get_llm_response(app, language, x_app_id):
+    # relevant_content is unused and removed
     ai_response = await call_gemma_api(app["googleApiKey"], "", model="gemini-1.5-flash")
     if isinstance(ai_response, dict) and ai_response.get("error"):
         raise HTTPException(status_code=502, detail=ai_response)
@@ -315,11 +300,11 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
     # Removed unused last_msgs, best_note, best_sim; fixed get_direct_qna_response call
     ai_response = get_direct_qna_response(user_message, relevant_content)
     if ai_response is None:
-        ai_response = get_best_note_response(relevant_content, embedding)
+        ai_response = get_best_note_response(embedding)
     if ai_response is None:
-        ai_response = get_url_response(relevant_content)
+        ai_response = get_url_response()
     if ai_response is None:
-        ai_response = await get_llm_response(relevant_content, app, language, x_app_id)
+        ai_response = await get_llm_response(app, language, x_app_id)
     guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
     if guardrail_result_out["blocked"]:
         ai_response = guardrail_result_out["message"]
