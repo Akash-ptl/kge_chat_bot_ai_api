@@ -33,9 +33,9 @@ async def create_note(app_id: str, note: NoteContent = Body(...)):
 	api_key = decrypt_api_key(app["googleApiKey"])
 	try:
 		embedding = await generate_embedding(text, api_key)
-	except Exception as e:
+	except Exception:
 		# Raise HTTPException so FastAPI returns a JSON error response
-		raise HTTPException(status_code=500, detail=f"Embedding error: {str(e)}")
+		raise HTTPException(status_code=500, detail="Embedding error")
 	doc = {
 		"_id": str(uuid.uuid4()),
 		"app_id": app_id,
@@ -43,7 +43,7 @@ async def create_note(app_id: str, note: NoteContent = Body(...)):
 		"content": note.dict(),
 		"embedding": embedding
 	}
-	result = await app_content_collection.insert_one(doc)
+	await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
  # GET /api/v1/admin/app/{app_id}/notes

@@ -31,29 +31,29 @@ async def list_guardrails(app_id: str):
 	guards = await guardrails_collection.find({"app_id": app_id}).to_list(100)
 	return [to_dict(g) for g in guards] if guards else []
 
-# GET /api/v1/admin/app/{appId}/guardrails/{ruleId}
-@router.get("/{ruleId}", response_model=dict)
-async def get_guardrail(app_id: str, ruleId: str):
-	guard = await guardrails_collection.find_one({"_id": ruleId, "app_id": app_id})
+# GET /api/v1/admin/app/{appId}/guardrails/{rule_id}
+@router.get("/{rule_id}", response_model=dict)
+async def get_guardrail(app_id: str, rule_id: str):
+	guard = await guardrails_collection.find_one({"_id": rule_id, "app_id": app_id})
 	if not guard:
 		raise HTTPException(status_code=404, detail="Guardrail not found")
 	return to_dict(guard)
 
-# PUT /api/v1/admin/app/{appId}/guardrails/{ruleId}
-@router.put("/{ruleId}", response_model=dict)
-async def update_guardrail(app_id: str, ruleId: str, guardrail: GuardrailModel = Body(...)):
+# PUT /api/v1/admin/app/{appId}/guardrails/{rule_id}
+@router.put("/{rule_id}", response_model=dict)
+async def update_guardrail(app_id: str, rule_id: str, guardrail: GuardrailModel = Body(...)):
 	update_result = await guardrails_collection.update_one(
-		{"_id": ruleId, "app_id": app_id},
+		{"_id": rule_id, "app_id": app_id},
 		{"$set": guardrail.dict(exclude_unset=True, by_alias=True)}
 	)
 	if update_result.modified_count == 0:
 		raise HTTPException(status_code=404, detail="Guardrail not found or data unchanged")
 	return {"message": "Guardrail updated successfully"}
 
-# DELETE /api/v1/admin/app/{appId}/guardrails/{ruleId}
-@router.delete("/{ruleId}", response_model=dict)
-async def delete_guardrail(app_id: str, ruleId: str):
-	delete_result = await guardrails_collection.delete_one({"_id": ruleId, "app_id": app_id})
+# DELETE /api/v1/admin/app/{appId}/guardrails/{rule_id}
+@router.delete("/{rule_id}", response_model=dict)
+async def delete_guardrail(app_id: str, rule_id: str):
+	delete_result = await guardrails_collection.delete_one({"_id": rule_id, "app_id": app_id})
 	if delete_result.deleted_count == 0:
 		raise HTTPException(status_code=404, detail="Guardrail not found")
 	return {"message": "Guardrail deleted successfully"}

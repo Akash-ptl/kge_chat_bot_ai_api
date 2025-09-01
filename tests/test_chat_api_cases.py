@@ -4,7 +4,8 @@ import time
 
 ADMIN_BASE_URL = "http://localhost:8000/api/v1/admin/app"
 CHAT_BASE_URL = "http://localhost:8000/api/v1/chat/message"
-GOOGLE_API_KEY = "AIzaSyDKzpg3Z8aLmY_lIoXRu7svHpDafmT_DhI"  # Use your real key if needed
+import os
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "test-key")
 
 
 def print_response(step, url, payload, response):
@@ -27,7 +28,7 @@ def create_app():
         "availableLanguages": ["en", "es", "fr"],
         "welcomeMessage": {"en": "Welcome!", "es": "¡Bienvenido!", "fr": "Bienvenue!"},
         "acknowledgmentMessage": {"en": "You're welcome!", "es": "¡De nada!", "fr": "De rien!"},
-        "googleApiKey": GOOGLE_API_KEY
+    "googleApiKey": GOOGLE_API_KEY
     }
     resp = requests.post(ADMIN_BASE_URL + "/", json=app_data)
     print(f"Create App: {resp.status_code}")

@@ -15,7 +15,8 @@ def print_response(name, url, resp):
 
 def run_api_tests():
     # 1. Create App
-    GOOGLE_API_KEY = "AIzaSyDKzpg3Z8aLmY_lIoXRu7svHpDafmT_DhI"
+    import os
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "test-key")
     app_data = {
         "name": "Test App",
         "description": "A test app.",
@@ -23,7 +24,7 @@ def run_api_tests():
         "availableLanguages": ["en", "es"],
         "welcomeMessage": {"en": "Welcome!", "es": "¡Bienvenido!"},
         "acknowledgmentMessage": {"en": "You're welcome!", "es": "¡De nada!"},
-        "googleApiKey": GOOGLE_API_KEY
+    "googleApiKey": GOOGLE_API_KEY
     }
     url = f"{BASE_URL}/admin/app"
     resp = requests.post(url, json=app_data)
@@ -45,7 +46,7 @@ def run_api_tests():
         "availableLanguages": ["en", "es", "fr"],
         "welcomeMessage": {"en": "Welcome!", "es": "¡Bienvenido!", "fr": "Bienvenue!"},
         "acknowledgmentMessage": {"en": "You're welcome!", "es": "¡De nada!", "fr": "De rien!"},
-        "googleApiKey": GOOGLE_API_KEY
+    "googleApiKey": GOOGLE_API_KEY
     }
     resp = requests.put(url, json=update_data)
     print_response("Update App", url, resp)

@@ -91,7 +91,7 @@ async def list_documents(app_id: str):
 	return [to_dict(d) for d in docs] if docs else []
 
 
- # PUT /api/v1/admin/app/{app_id}/documents/{documentId}
+# PUT /api/v1/admin/app/{app_id}/documents/{document_id}
 
 async def extract_pdf_text(document: DocumentContent) -> str:
 	import tempfile
@@ -128,8 +128,8 @@ async def extract_pdf_text(document: DocumentContent) -> str:
 		raise HTTPException(status_code=400, detail="Either file or url must be provided.")
 
 
-@router.put("/{documentId}", response_model=dict)
-async def update_document(app_id: str, documentId: str, document: DocumentContent = Body(...)):
+@router.put("/{document_id}", response_model=dict)
+async def update_document(app_id: str, document_id: str, document: DocumentContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
 	if not app or not app.get("googleApiKey"):
 		raise HTTPException(status_code=400, detail="App or Google API key not found")
@@ -141,18 +141,18 @@ async def update_document(app_id: str, documentId: str, document: DocumentConten
 
 	embedding = await generate_embedding(extracted_text, api_key)
 	update_result = await app_content_collection.update_one(
-		{"_id": documentId, "contentType": "document", "app_id": app_id},
+			   {"_id": document_id, "contentType": "document", "app_id": app_id},
 		{"$set": {"content": document.dict(), "embedding": embedding, "extractedText": extracted_text[:10000]}}
 	)
 	if update_result.modified_count == 0:
 		raise HTTPException(status_code=404, detail="Document not found or data unchanged")
 	return {"message": "Document updated successfully"}
 
- # DELETE /api/v1/admin/app/{app_id}/documents/{documentId}
-@router.delete("/{documentId}", response_model=dict)
-async def delete_document(app_id: str, documentId: str):
+# DELETE /api/v1/admin/app/{app_id}/documents/{document_id}
+@router.delete("/{document_id}", response_model=dict)
+async def delete_document(app_id: str, document_id: str):
 	# Remove the document and its embedding
-	delete_result = await app_content_collection.delete_one({"_id": documentId, "contentType": "document", "app_id": app_id})
+	delete_result = await app_content_collection.delete_one({"_id": document_id, "contentType": "document", "app_id": app_id})
 	if delete_result.deleted_count == 0:
 		raise HTTPException(status_code=404, detail="Document not found")
 	return {"message": "Document deleted successfully"}

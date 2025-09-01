@@ -8,8 +8,8 @@ import base64
 router = APIRouter(prefix="/api/v1/admin/app/{app_id}/settings", tags=["Admin Settings"])
 
 @router.put("/welcome-message", response_model=dict)
-async def update_welcome_message(app_id: str, welcomeMessage: Dict[str, str] = Body(...)):
-    result = await app_collection.update_one({"_id": app_id}, {"$set": {"welcomeMessage": welcomeMessage}})
+async def update_welcome_message(app_id: str, welcome_message: Dict[str, str] = Body(...)):
+    result = await app_collection.update_one({"_id": app_id}, {"$set": {"welcomeMessage": welcome_message}})
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="App not found or message unchanged")
     return {"message": "Welcome message updated"}
