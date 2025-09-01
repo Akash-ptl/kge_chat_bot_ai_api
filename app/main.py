@@ -42,8 +42,6 @@ async def root():
 
 # AIzaSyDVm1IWybAQwb-AtcxwXWd3R5Oww4ZhOkc
 
-
 # AIzaSyDKzpg3Z8aLmY_lIoXRu7svHpDafmT_DhI
-
 
 # /Users/akashptl/Cli/KGE/Chat_Bot/ai_chat_bot/.venv/bin/python tests/test_api_crud.py

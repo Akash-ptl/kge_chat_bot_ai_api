@@ -1,3 +1,4 @@
+PROMPT_SEPARATOR = "\n---\n"
 # app/routers/chat.py
 from fastapi import APIRouter, Request, Header, HTTPException, Body
 from typing import Optional, Dict
@@ -20,8 +21,36 @@ import datetime
 
 router = APIRouter(prefix="/api/v1/chat", tags=["Chat User"])
 
+
 def decrypt_api_key(enc_key: str) -> str:
     return base64.b64decode(enc_key.encode()).decode()
+
+def detect_language_switch(user_message_lower, switch_phrases):
+    for phrase, lang in switch_phrases:
+        if phrase in user_message_lower:
+            return lang
+    return None
+
+def detect_thank_you(user_message_lower, thank_you_phrases):
+    return any(phrase in user_message_lower for phrase in thank_you_phrases)
+
+def build_prompt(user_message, qna_context, note_context, url_context, doc_context, last_msgs):
+    prompt = (
+        "You are an expert assistant. Answer the user's question strictly using ONLY the provided context below. "
+        "If the answer is not present, reply 'I don't know based on the provided context.'\n"
+        f"User Question: {user_message}\n"
+    )
+    if qna_context:
+        prompt += "\nQ&A Knowledge Base:\n" + PROMPT_SEPARATOR.join(qna_context)
+    if note_context:
+        prompt += "\nNotes:\n" + PROMPT_SEPARATOR.join(note_context)
+    if url_context:
+        prompt += "\nURLs:\n" + PROMPT_SEPARATOR.join(url_context)
+    if doc_context:
+        prompt += "\nDocuments:\n" + PROMPT_SEPARATOR.join(doc_context)
+    if last_msgs:
+        prompt += "\n\nChat History:\n" + "\n".join([m["message"] for m in last_msgs])
+    return prompt
 
 async def get_app(app_id: str):
     app = await app_collection.find_one({"_id": app_id})
@@ -42,50 +71,50 @@ async def get_session(app_id: str, session_id: Optional[str]):
             return session
     # Create new session
     new_session_id = str(uuid4())
+    now = datetime.datetime.now(datetime.timezone.utc)
     session = {
         "_id": new_session_id,
         "appId": app_id,
-        "startedAt": datetime.datetime.utcnow(),
-        "lastActiveAt": datetime.datetime.utcnow(),
+        "startedAt": now,
+        "lastActiveAt": now,
         "status": "active",
         "language": None
     }
     await chat_sessions_collection.insert_one(session)
     return session
 
+
+def _guardrail_result(blocked, rule, response_msg):
+    return {"blocked": blocked, "ruleId": str(rule["_id"]), "message": response_msg}
+
+def _evaluate_rule(rule, text, language, direction):
+    rule_type = rule.get("ruleType")
+    pattern = rule.get("pattern", "")
+    action = rule.get("action", "block_input")
+    response_msg = rule.get("responseMessage", {}).get(language, "Blocked by guardrail.")
+    if rule_type == "blacklist_phrase" and pattern in text:
+        if action in ("block_input", "override_response"):
+            return _guardrail_result(True, rule, response_msg)
+        elif action == "log_only":
+            return _guardrail_result(False, rule, response_msg)
+    if rule_type == "topic_restriction" and pattern in text:
+        if action in ("block_input", "override_response"):
+            return _guardrail_result(True, rule, response_msg)
+        elif action == "log_only":
+            return _guardrail_result(False, rule, response_msg)
+    if direction == "output" and rule_type == "response_filter" and pattern in text:
+        if action in ("override_response", "block_input"):
+            return _guardrail_result(True, rule, response_msg)
+        elif action == "log_only":
+            return _guardrail_result(False, rule, response_msg)
+    return None
+
 async def apply_guardrails(app_id: str, text: str, language: str, direction: str = "input"):
-    # direction: "input" or "output"
     guardrails = await app_guardrails_collection.find({"appId": app_id, "isActive": True}).to_list(100)
     for rule in guardrails:
-        rule_type = rule.get("ruleType")
-        pattern = rule.get("pattern", "")
-        action = rule.get("action", "block_input")
-        response_msg = rule.get("responseMessage", {}).get(language, "Blocked by guardrail.")
-        # Blacklist phrase
-        if rule_type == "blacklist_phrase" and pattern in text:
-            if action == "block_input":
-                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
-            elif action == "override_response":
-                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
-            elif action == "log_only":
-                # Log only, do not block
-                return {"blocked": False, "ruleId": str(rule["_id"]), "message": response_msg}
-        # Topic restriction (simple substring match)
-        if rule_type == "topic_restriction" and pattern in text:
-            if action == "block_input":
-                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
-            elif action == "override_response":
-                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
-            elif action == "log_only":
-                return {"blocked": False, "ruleId": str(rule["_id"]), "message": response_msg}
-        # Response filter (for output)
-        if direction == "output" and rule_type == "response_filter" and pattern in text:
-            if action == "override_response":
-                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
-            elif action == "block_input":
-                return {"blocked": True, "ruleId": str(rule["_id"]), "message": response_msg}
-            elif action == "log_only":
-                return {"blocked": False, "ruleId": str(rule["_id"]), "message": response_msg}
+        result = _evaluate_rule(rule, text, language, direction)
+        if result is not None:
+            return result
     return {"blocked": False}
 
 async def get_relevant_content(app_id: str, embedding: list, limit: int = 5):
@@ -156,19 +185,16 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
         ("speak in english", "en")
     ]
     user_message_lower = user_message.lower()
-    switched = False
-    for phrase, lang in switch_phrases:
-        if phrase in user_message_lower:
-            language = lang
-            await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"language": lang}})
-            switched = True
-            break
+    lang_switch = detect_language_switch(user_message_lower, switch_phrases)
+    if lang_switch:
+        language = lang_switch
+        await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"language": lang_switch}})
 
     # 2. Welcome message on new session
     is_new_session = not x_session_id or not session.get("lastActiveAt")
     if is_new_session:
         welcome = app.get("welcomeMessage", {}).get(language, "Welcome!")
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         await chat_messages_collection.insert_one({
             "appId": x_app_id,
             "sessionId": session["_id"],
@@ -188,9 +214,9 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
 
     # 3. Thank you/acknowledgment detection
     thank_you_phrases = ["thank you", "thanks", "thx", "gracias", "merci"]
-    if any(phrase in user_message_lower for phrase in thank_you_phrases):
+    if detect_thank_you(user_message_lower, thank_you_phrases):
         ack = app.get("acknowledgmentMessage", {}).get(language, "You're welcome!")
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         await chat_messages_collection.insert_one({
             "appId": x_app_id,
             "sessionId": session["_id"],
@@ -270,7 +296,6 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
         note_context = []
         url_context = []
         doc_context = []
-        # For notes, highlight the most relevant note (if any)
         for c in relevant_content:
             if c.get("contentType") == "qa":
                 qna_context.append(f"Q: {c['content'].get('question', '')}\nA: {c['content'].get('answer', '')}")
@@ -287,21 +312,7 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
                     doc_context.append(f"Document: {c['extractedText']}")
                 else:
                     doc_context.append(f"Document: {c['content'].get('filename', '')} {c['content'].get('url', '')}")
-        prompt = (
-            "You are an expert assistant. Answer the user's question strictly using ONLY the provided context below. "
-            "If the answer is not present, reply 'I don't know based on the provided context.'\n"
-            f"User Question: {user_message}\n"
-        )
-        if qna_context:
-            prompt += "\nQ&A Knowledge Base:\n" + "\n---\n".join(qna_context)
-        if note_context:
-            prompt += "\nNotes:\n" + "\n---\n".join(note_context)
-        if url_context:
-            prompt += "\nURLs:\n" + "\n---\n".join(url_context)
-        if doc_context:
-            prompt += "\nDocuments:\n" + "\n---\n".join(doc_context)
-        if last_msgs:
-            prompt += "\n\nChat History:\n" + "\n".join([m["message"] for m in last_msgs])
+        prompt = build_prompt(user_message, qna_context, note_context, url_context, doc_context, last_msgs)
         logging.info("\n--- LLM Prompt ---\n" + prompt[:2000] + ("..." if len(prompt) > 2000 else "") + "\n--- End Prompt ---\n")
         ai_response = await call_gemma_api(app["googleApiKey"], prompt, model="gemini-1.5-flash")
         if isinstance(ai_response, dict) and ai_response.get("error"):
@@ -317,7 +328,7 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
         if guardrail_result_out["blocked"]:
             ai_response = guardrail_result_out["message"]
     # Store message and response
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     await chat_messages_collection.insert_one({
         "appId": x_app_id,
         "sessionId": session["_id"],
