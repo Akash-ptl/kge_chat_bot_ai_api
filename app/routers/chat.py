@@ -5,9 +5,8 @@ def get_direct_qna_response(user_message, relevant_content):
             pass
     return None
 
-def get_best_note_response(embedding):
-    import numpy as np
-    # relevant_content is unused and removed
+def get_best_note_response():
+    # embedding is unused and removed
     return None
 
 def get_url_response():
@@ -165,7 +164,7 @@ async def apply_guardrails(app_id: str, text: str, language: str, direction: str
             return result
     return {"blocked": False}
 
-async def get_relevant_content(app_id: str, embedding: list, limit: int = 5):
+async def get_relevant_content(app_id: str, limit: int = 5):
     # Vector similarity search using embedding (cosine similarity)
     from numpy import dot
     from numpy.linalg import norm
@@ -174,22 +173,8 @@ async def get_relevant_content(app_id: str, embedding: list, limit: int = 5):
     qnas = await app_content_collection.find({"appId": app_id, "contentType": "qa"}).to_list(100)
     notes = await app_content_collection.find({"appId": app_id, "contentType": "note"}).to_list(100)
     urls = await app_content_collection.find({"appId": app_id, "contentType": "url"}).to_list(100)
-    # For documents, use similarity search
-    docs = []
-    if embedding:
-        doc_candidates = await app_content_collection.find({"appId": app_id, "contentType": "document", "embedding": {"$exists": True}}).to_list(100)
-        scored = []
-        emb = np.array(embedding)
-        for d in doc_candidates:
-            doc_emb = np.array(d.get("embedding", []))
-            if doc_emb.size == 0:
-                continue
-            sim = float(dot(emb, doc_emb) / (norm(emb) * norm(doc_emb) + 1e-8))
-            scored.append((sim, d))
-        scored.sort(reverse=True, key=lambda x: x[0])
-        docs = [d for sim, d in scored[:limit]]
-    else:
-        docs = await app_content_collection.find({"appId": app_id, "contentType": "document"}).sort("updatedAt", -1).to_list(limit)
+    # For documents, always fetch by updatedAt (embedding parameter removed)
+    docs = await app_content_collection.find({"appId": app_id, "contentType": "document"}).sort("updatedAt", -1).to_list(limit)
     # Combine all for context
     return qnas + notes + urls + docs
 
@@ -296,11 +281,11 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
     # Generate embedding for user message
     from app.services.embedding import generate_embedding
     embedding = await generate_embedding(user_message, app["googleApiKey"])
-    relevant_content = await get_relevant_content(x_app_id, embedding)
+    relevant_content = await get_relevant_content(x_app_id)
     # Removed unused last_msgs, best_note, best_sim; fixed get_direct_qna_response call
     ai_response = get_direct_qna_response(user_message, relevant_content)
     if ai_response is None:
-        ai_response = get_best_note_response(embedding)
+        ai_response = get_best_note_response()
     if ai_response is None:
         ai_response = get_url_response()
     if ai_response is None:
