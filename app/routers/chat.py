@@ -29,25 +29,10 @@ def get_url_response(relevant_content):
             pass
     return None
 
-def build_contexts(relevant_content, best_note, best_sim):
-    _ = []  # qna_context
-    _ = []  # note_context
-    _ = []  # url_context
-    _ = []  # doc_context
-    for c in relevant_content:
-        ctype = c.get("contentType")
-        if ctype == "qa":
-            pass
-        elif ctype == "note":
-            pass
-        elif ctype == "url":
-            pass
-        elif ctype == "document":
-            pass
-    return [], [], [], []
 
-async def get_llm_response(relevant_content, best_note, best_sim, app, language, x_app_id):
-    build_contexts(relevant_content, best_note, best_sim)
+
+async def get_llm_response(relevant_content, app, language, x_app_id):
+    # build_contexts(relevant_content)  # Removed: function deleted as it was unused and unimplemented
     ai_response = await call_gemma_api(app["googleApiKey"], "", model="gemini-1.5-flash")
     if isinstance(ai_response, dict) and ai_response.get("error"):
         raise HTTPException(status_code=502, detail=ai_response)
@@ -337,7 +322,7 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
     if ai_response is None:
         ai_response = get_url_response(relevant_content)
     if ai_response is None:
-        ai_response = await get_llm_response(relevant_content, best_note, best_sim, app, language, x_app_id)
+        ai_response = await get_llm_response(relevant_content, app, language, x_app_id)
     guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
     if guardrail_result_out["blocked"]:
         ai_response = guardrail_result_out["message"]
