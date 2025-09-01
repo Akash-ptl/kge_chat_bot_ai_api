@@ -22,7 +22,7 @@ async def create_guardrail(app_id: str, guardrail: GuardrailModel = Body(...)):
 	doc = guardrail.dict(by_alias=True)
 	doc["app_id"] = app_id
 	doc["_id"] = str(uuid.uuid4())
-	result = await guardrails_collection.insert_one(doc)
+	await guardrails_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
 # GET /api/v1/admin/app/{appId}/guardrails

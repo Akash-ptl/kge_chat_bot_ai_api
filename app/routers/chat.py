@@ -1,11 +1,8 @@
 def get_direct_qna_response(relevant_content):
     for c in relevant_content:
         if c.get("contentType") == "qa":
-            q = c["content"].get("question", "").strip().lower()
-            a = c["content"].get("answer", "")
             # The user_message check must be handled by the caller
-            # if user_message.strip().lower() == q:
-            #     return a
+            pass
     return None
 
 def get_best_note_response(relevant_content, embedding):
@@ -28,41 +25,29 @@ def get_best_note_response(relevant_content, embedding):
 def get_url_response(relevant_content):
     for c in relevant_content:
         if c.get("contentType") == "url":
-            desc = c["content"].get("description", "").strip().lower()
-            url_val = c["content"].get("url", "")
             # The user_message check must be handled by the caller
-            # if desc and desc in user_message.strip().lower():
-            #     return url_val
-            # if url_val and url_val in user_message:
-            #     return url_val
+            pass
     return None
 
 def build_contexts(relevant_content, best_note, best_sim):
-    qna_context = []
-    note_context = []
-    url_context = []
-    doc_context = []
+    _ = []  # qna_context
+    _ = []  # note_context
+    _ = []  # url_context
+    _ = []  # doc_context
     for c in relevant_content:
         ctype = c.get("contentType")
         if ctype == "qa":
-            qna_context.append(f"Q: {c['content'].get('question', '')}\nA: {c['content'].get('answer', '')}")
+            pass
         elif ctype == "note":
-            note_text = c['content'].get('text', '')
-            if best_note and c == best_note and best_sim > 0.4:
-                note_context.append(f"[MOST RELEVANT NOTE]: {note_text}")
-            else:
-                note_context.append(f"Note: {note_text}")
+            pass
         elif ctype == "url":
-            url_context.append(f"URL: {c['content'].get('url', '')}\nDescription: {c['content'].get('description', '')}")
+            pass
         elif ctype == "document":
-            if c.get("extractedText"):
-                doc_context.append(f"Document: {c['extractedText']}")
-            else:
-                doc_context.append(f"Document: {c['content'].get('filename', '')} {c['content'].get('url', '')}")
-    return qna_context, note_context, url_context, doc_context
+            pass
+    return [], [], [], []
 
-async def get_llm_response(relevant_content, last_msgs, best_note, best_sim, app, language, x_app_id):
-    qna_context, note_context, url_context, doc_context = build_contexts(relevant_content, best_note, best_sim)
+async def get_llm_response(relevant_content, best_note, best_sim, app, language, x_app_id):
+    build_contexts(relevant_content, best_note, best_sim)
     ai_response = await call_gemma_api(app["googleApiKey"], "", model="gemini-1.5-flash")
     if isinstance(ai_response, dict) and ai_response.get("error"):
         raise HTTPException(status_code=502, detail=ai_response)
@@ -348,14 +333,12 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
     best_note = None
     best_sim = -1
     if ai_response is None:
-        ai_response = get_best_note_response(user_message, relevant_content, embedding)
+        ai_response = get_best_note_response(relevant_content, embedding)
     if ai_response is None:
-        ai_response = get_url_response(user_message, relevant_content)
+        ai_response = get_url_response(relevant_content)
     if ai_response is None:
-        ai_response = await get_llm_response(user_message, relevant_content, last_msgs, best_note, best_sim, app, language, x_app_id)
-        guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
-    else:
-        guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
+        ai_response = await get_llm_response(relevant_content, best_note, best_sim, app, language, x_app_id)
+    guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
     if guardrail_result_out["blocked"]:
         ai_response = guardrail_result_out["message"]
     await store_message_and_response(x_app_id, session, user_message, ai_response, language)

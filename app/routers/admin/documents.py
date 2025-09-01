@@ -81,7 +81,7 @@ async def create_document(app_id: str, document: DocumentContent = Body(...)):
 		"embedding": embedding,
 		"extractedText": extracted_text[:10000]  # Store up to 10k chars for reference
 	}
-	result = await app_content_collection.insert_one(doc)
+	await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
  # GET /api/v1/admin/app/{app_id}/documents
