@@ -24,8 +24,8 @@ def to_dict(obj):
 	return obj
 
 @router.post("", response_model=dict)
-async def create_qna(appId: str, qna: QnAContent = Body(...)):
-	app = await app_collection.find_one({"_id": appId})
+async def create_qna(app_id: str, qna: QnAContent = Body(...)):
+	app = await app_collection.find_one({"_id": app_id})
 	if not app or not app.get("googleApiKey"):
 		raise HTTPException(status_code=400, detail="App or Google API key not found")
 	text = f"{qna.question} {qna.answer}"
@@ -33,7 +33,7 @@ async def create_qna(appId: str, qna: QnAContent = Body(...)):
 	embedding = await generate_embedding(text, api_key)
 	doc = {
 		"_id": str(uuid.uuid4()),
-		"appId": appId,
+		"app_id": app_id,
 		"contentType": "qa",
 		"content": qna.dict(),
 		"embedding": embedding
@@ -42,30 +42,30 @@ async def create_qna(appId: str, qna: QnAContent = Body(...)):
 	return {"id": doc["_id"]}
 
 @router.get("", response_model=List[dict])
-async def list_qna(appId: str):
-	qnas = await app_content_collection.find({"appId": appId, "contentType": "qa"}).to_list(100)
+async def list_qna(app_id: str):
+	qnas = await app_content_collection.find({"app_id": app_id, "contentType": "qa"}).to_list(100)
 	return [to_dict(q) for q in qnas] if qnas else []
 
-@router.put("/{qaId}", response_model=dict)
-async def update_qna(appId: str, qaId: str, qna: QnAContent = Body(...)):
-	app = await app_collection.find_one({"_id": appId})
+@router.put("/{qa_id}", response_model=dict)
+async def update_qna(app_id: str, qa_id: str, qna: QnAContent = Body(...)):
+	app = await app_collection.find_one({"_id": app_id})
 	if not app or not app.get("googleApiKey"):
 		raise HTTPException(status_code=400, detail="App or Google API key not found")
 	text = f"{qna.question} {qna.answer}"
 	api_key = decrypt_api_key(app["googleApiKey"])
 	embedding = await generate_embedding(text, api_key)
 	update_result = await app_content_collection.update_one(
-		{"_id": qaId, "contentType": "qa", "appId": appId},
+		{"_id": qa_id, "contentType": "qa", "app_id": app_id},
 		{"$set": {"content": qna.dict(), "embedding": embedding}}
 	)
 	if update_result.modified_count == 0:
 		raise HTTPException(status_code=404, detail="QnA not found or data unchanged")
 	return {"message": "QnA updated successfully"}
 
-@router.delete("/{qaId}", response_model=dict)
-async def delete_qna(appId: str, qaId: str):
+@router.delete("/{qa_id}", response_model=dict)
+async def delete_qna(app_id: str, qa_id: str):
 	# Remove the document and its embedding
-	delete_result = await app_content_collection.delete_one({"_id": qaId, "contentType": "qa", "appId": appId})
+	delete_result = await app_content_collection.delete_one({"_id": qa_id, "contentType": "qa", "app_id": app_id})
 	if delete_result.deleted_count == 0:
 		raise HTTPException(status_code=404, detail="QnA not found")
 	return {"message": "QnA deleted successfully"}

@@ -1,3 +1,91 @@
+def get_direct_qna_response(user_message, relevant_content):
+    for c in relevant_content:
+        if c.get("contentType") == "qa":
+            q = c["content"].get("question", "").strip().lower()
+            a = c["content"].get("answer", "")
+            if user_message.strip().lower() == q:
+                return a
+    return None
+
+def get_best_note_response(user_message, relevant_content, embedding):
+    import numpy as np
+    best_note = None
+    best_sim = -1
+    for c in relevant_content:
+        if c.get("contentType") == "note" and c.get("embedding"):
+            note_emb = np.array(c["embedding"])
+            user_emb = np.array(embedding)
+            if note_emb.size and user_emb.size:
+                sim = float(np.dot(user_emb, note_emb) / (np.linalg.norm(user_emb) * np.linalg.norm(note_emb) + 1e-8))
+                if sim > best_sim:
+                    best_sim = sim
+                    best_note = c
+    if best_note and best_sim > 0.7:
+        return best_note["content"].get("text", "")
+    return None
+
+def get_url_response(user_message, relevant_content):
+    for c in relevant_content:
+        if c.get("contentType") == "url":
+            desc = c["content"].get("description", "").strip().lower()
+            url_val = c["content"].get("url", "")
+            if desc and desc in user_message.strip().lower():
+                return url_val
+            if url_val and url_val in user_message:
+                return url_val
+    return None
+
+async def get_llm_response(user_message, relevant_content, last_msgs, best_note, best_sim, app, language, x_app_id):
+    qna_context = []
+    note_context = []
+    url_context = []
+    doc_context = []
+    for c in relevant_content:
+        if c.get("contentType") == "qa":
+            qna_context.append(f"Q: {c['content'].get('question', '')}\nA: {c['content'].get('answer', '')}")
+        elif c.get("contentType") == "note":
+            note_text = c['content'].get('text', '')
+            if best_note and c == best_note and best_sim > 0.4:
+                note_context.append(f"[MOST RELEVANT NOTE]: {note_text}")
+            else:
+                note_context.append(f"Note: {note_text}")
+        elif c.get("contentType") == "url":
+            url_context.append(f"URL: {c['content'].get('url', '')}\nDescription: {c['content'].get('description', '')}")
+        elif c.get("contentType") == "document":
+            if c.get("extractedText"):
+                doc_context.append(f"Document: {c['extractedText']}")
+            else:
+                doc_context.append(f"Document: {c['content'].get('filename', '')} {c['content'].get('url', '')}")
+    prompt = build_prompt(user_message, qna_context, note_context, url_context, doc_context, last_msgs)
+    logging.info("\n--- LLM Prompt ---\n" + prompt[:2000] + ("..." if len(prompt) > 2000 else "") + "\n--- End Prompt ---\n")
+    ai_response = await call_gemma_api(app["googleApiKey"], prompt, model="gemini-1.5-flash")
+    if isinstance(ai_response, dict) and ai_response.get("error"):
+        raise HTTPException(status_code=502, detail=ai_response)
+    guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
+    if guardrail_result_out["blocked"]:
+        ai_response = guardrail_result_out["message"]
+    return ai_response
+
+async def store_message_and_response(x_app_id, session, user_message, ai_response, language):
+    now = datetime.datetime.now(datetime.timezone.utc)
+    await chat_messages_collection.insert_one({
+        "appId": x_app_id,
+        "sessionId": session["_id"],
+        "sender": "user",
+        "message": user_message,
+        "timestamp": now,
+        "language": language
+    })
+    await chat_messages_collection.insert_one({
+        "appId": x_app_id,
+        "sessionId": session["_id"],
+        "sender": "ai",
+        "message": ai_response,
+        "timestamp": now,
+        "language": language
+    })
+    await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"lastActiveAt": now, "language": language}})
+    return now
 PROMPT_SEPARATOR = "\n---\n"
 # app/routers/chat.py
 from fastapi import APIRouter, Request, Header, HTTPException, Body
@@ -251,102 +339,21 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
     relevant_content = await get_relevant_content(x_app_id, embedding)
     last_msgs = await get_last_messages(x_app_id, session["_id"])
 
-    # Direct retrieval for QnA, Note, URL
-    ai_response = None
-    import numpy as np
-    # QnA: exact match
-    for c in relevant_content:
-        if c.get("contentType") == "qa":
-            q = c["content"].get("question", "").strip().lower()
-            a = c["content"].get("answer", "")
-            if user_message.strip().lower() == q:
-                ai_response = a
-                break
-    # Note: semantic similarity (embedding)
+    ai_response = get_direct_qna_response(user_message, relevant_content)
     best_note = None
     best_sim = -1
     if ai_response is None:
-        for c in relevant_content:
-            if c.get("contentType") == "note" and c.get("embedding"):
-                note_emb = np.array(c["embedding"])
-                user_emb = np.array(embedding)
-                if note_emb.size and user_emb.size:
-                    sim = float(np.dot(user_emb, note_emb) / (np.linalg.norm(user_emb) * np.linalg.norm(note_emb) + 1e-8))
-                    if sim > best_sim:
-                        best_sim = sim
-                        best_note = c
-        # If similarity is high enough, use the note text directly
-        if best_note and best_sim > 0.7:
-            ai_response = best_note["content"].get("text", "")
-    # URL: match description or url
+        ai_response = get_best_note_response(user_message, relevant_content, embedding)
     if ai_response is None:
-        for c in relevant_content:
-            if c.get("contentType") == "url":
-                desc = c["content"].get("description", "").strip().lower()
-                url_val = c["content"].get("url", "")
-                if desc and desc in user_message.strip().lower():
-                    ai_response = url_val
-                    break
-                if url_val and url_val in user_message:
-                    ai_response = url_val
-                    break
-    # Fallback: LLM for docs or if no direct match
+        ai_response = get_url_response(user_message, relevant_content)
     if ai_response is None:
-        qna_context = []
-        note_context = []
-        url_context = []
-        doc_context = []
-        for c in relevant_content:
-            if c.get("contentType") == "qa":
-                qna_context.append(f"Q: {c['content'].get('question', '')}\nA: {c['content'].get('answer', '')}")
-            elif c.get("contentType") == "note":
-                note_text = c['content'].get('text', '')
-                if best_note and c == best_note and best_sim > 0.4:
-                    note_context.append(f"[MOST RELEVANT NOTE]: {note_text}")
-                else:
-                    note_context.append(f"Note: {note_text}")
-            elif c.get("contentType") == "url":
-                url_context.append(f"URL: {c['content'].get('url', '')}\nDescription: {c['content'].get('description', '')}")
-            elif c.get("contentType") == "document":
-                if c.get("extractedText"):
-                    doc_context.append(f"Document: {c['extractedText']}")
-                else:
-                    doc_context.append(f"Document: {c['content'].get('filename', '')} {c['content'].get('url', '')}")
-        prompt = build_prompt(user_message, qna_context, note_context, url_context, doc_context, last_msgs)
-        logging.info("\n--- LLM Prompt ---\n" + prompt[:2000] + ("..." if len(prompt) > 2000 else "") + "\n--- End Prompt ---\n")
-        ai_response = await call_gemma_api(app["googleApiKey"], prompt, model="gemini-1.5-flash")
-        if isinstance(ai_response, dict) and ai_response.get("error"):
-            # Return a user-friendly error if Gemma API fails
-            raise HTTPException(status_code=502, detail=ai_response)
-        # Output guardrails
+        ai_response = await get_llm_response(user_message, relevant_content, last_msgs, best_note, best_sim, app, language, x_app_id)
         guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
-        if guardrail_result_out["blocked"]:
-            ai_response = guardrail_result_out["message"]
     else:
-        # Output guardrails for direct answers
         guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
-        if guardrail_result_out["blocked"]:
-            ai_response = guardrail_result_out["message"]
-    # Store message and response
-    now = datetime.datetime.now(datetime.timezone.utc)
-    await chat_messages_collection.insert_one({
-        "appId": x_app_id,
-        "sessionId": session["_id"],
-        "sender": "user",
-        "message": user_message,
-        "timestamp": now,
-        "language": language
-    })
-    await chat_messages_collection.insert_one({
-        "appId": x_app_id,
-        "sessionId": session["_id"],
-        "sender": "ai",
-        "message": ai_response,
-        "timestamp": now,
-        "language": language
-    })
-    # Update session last active and language
-    await chat_sessions_collection.update_one({"_id": session["_id"]}, {"$set": {"lastActiveAt": now, "language": language}})
+    if guardrail_result_out["blocked"]:
+        ai_response = guardrail_result_out["message"]
+    await store_message_and_response(x_app_id, session, user_message, ai_response, language)
     return ChatMessageResponse(
         sessionId=session["_id"],
         message=ai_response,

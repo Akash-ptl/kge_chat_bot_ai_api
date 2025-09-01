@@ -5,11 +5,11 @@ from app.db import app_collection
 from typing import Dict, List
 import base64
 
-router = APIRouter(prefix="/api/v1/admin/app/{appId}/settings", tags=["Admin Settings"])
+router = APIRouter(prefix="/api/v1/admin/app/{app_id}/settings", tags=["Admin Settings"])
 
 @router.put("/welcome-message", response_model=dict)
-async def update_welcome_message(appId: str, welcomeMessage: Dict[str, str] = Body(...)):
-    result = await app_collection.update_one({"_id": appId}, {"$set": {"welcomeMessage": welcomeMessage}})
+async def update_welcome_message(app_id: str, welcomeMessage: Dict[str, str] = Body(...)):
+    result = await app_collection.update_one({"_id": app_id}, {"$set": {"welcomeMessage": welcomeMessage}})
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="App not found or message unchanged")
     return {"message": "Welcome message updated"}
@@ -17,10 +17,10 @@ async def update_welcome_message(appId: str, welcomeMessage: Dict[str, str] = Bo
 
 # New endpoint to update both availableLanguages and defaultLanguage
 @router.put("/languages-settings", response_model=dict)
-async def update_languages_settings(appId: str, availableLanguages: List[str] = Body(...), defaultLanguage: str = Body(...)):
+async def update_languages_settings(app_id: str, available_languages: List[str] = Body(...), default_language: str = Body(...)):
     result = await app_collection.update_one(
-        {"_id": appId},
-        {"$set": {"availableLanguages": availableLanguages, "defaultLanguage": defaultLanguage}}
+        {"_id": app_id},
+        {"$set": {"availableLanguages": available_languages, "defaultLanguage": default_language}}
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="App not found or settings unchanged")
@@ -35,9 +35,9 @@ def decrypt_api_key(enc_key: str) -> str:
     return base64.b64decode(enc_key.encode()).decode()
 
 @router.put("/google-api-key", response_model=dict)
-async def update_google_api_key(appId: str, googleApiKey: str = Body(...)):
-    encrypted_key = encrypt_api_key(googleApiKey)
-    result = await app_collection.update_one({"_id": appId}, {"$set": {"googleApiKey": encrypted_key}})
+async def update_google_api_key(app_id: str, google_api_key: str = Body(...)):
+    encrypted_key = encrypt_api_key(google_api_key)
+    result = await app_collection.update_one({"_id": app_id}, {"$set": {"googleApiKey": encrypted_key}})
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="App not found or key unchanged")
     return {"message": "Google API key updated"}

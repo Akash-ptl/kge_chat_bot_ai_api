@@ -4,7 +4,7 @@ from datetime import datetime
 
 class GuardrailModel(BaseModel):
 	id: Optional[str] = Field(alias="_id", default=None)
-	appId: str
+	app_id: str
 	ruleName: str
 	ruleType: str
 	pattern: str
@@ -18,7 +18,7 @@ class GuardrailModel(BaseModel):
 		schema_extra = {
 			"example": {
 				"_id": "b7e6c2e2-8c2e-4b7e-9c2e-8c2e4b7e9c2e",
-				"appId": "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6",
+				"app_id": "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6",
 				"ruleName": "Block offensive language",
 				"ruleType": "blacklist_phrase",
 				"pattern": "badword",

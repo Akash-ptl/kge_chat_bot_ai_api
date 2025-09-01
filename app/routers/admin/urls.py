@@ -13,7 +13,7 @@ from ...models.content import URLContent
 from typing import List
 import uuid
 
-router = APIRouter(prefix="/api/v1/admin/app/{appId}/urls", tags=["Admin URLs"])
+router = APIRouter(prefix="/api/v1/admin/app/{app_id}/urls", tags=["Admin URLs"])
 
 def to_dict(obj):
 	if isinstance(obj, dict):
@@ -23,10 +23,10 @@ def to_dict(obj):
 	# No ObjectId conversion needed; all IDs are strings
 	return obj
 
-# POST /api/v1/admin/app/{appId}/urls
+ # POST /api/v1/admin/app/{app_id}/urls
 @router.post("", response_model=dict)
-async def create_url(appId: str, url: URLContent = Body(...)):
-	app = await app_collection.find_one({"_id": appId})
+async def create_url(app_id: str, url: URLContent = Body(...)):
+	app = await app_collection.find_one({"_id": app_id})
 	if not app or not app.get("googleApiKey"):
 		raise HTTPException(status_code=400, detail="App or Google API key not found")
 	text = url.url + (" " + url.description if url.description else "")
@@ -34,7 +34,7 @@ async def create_url(appId: str, url: URLContent = Body(...)):
 	embedding = await generate_embedding(text, api_key)
 	doc = {
 		"_id": str(uuid.uuid4()),
-		"appId": appId,
+		"app_id": app_id,
 		"contentType": "url",
 		"content": url.dict(),
 		"embedding": embedding
@@ -42,34 +42,34 @@ async def create_url(appId: str, url: URLContent = Body(...)):
 	result = await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
-# GET /api/v1/admin/app/{appId}/urls
+ # GET /api/v1/admin/app/{app_id}/urls
 @router.get("", response_model=List[dict])
-async def list_urls(appId: str):
-	urls = await app_content_collection.find({"appId": appId, "contentType": "url"}).to_list(100)
+async def list_urls(app_id: str):
+	urls = await app_content_collection.find({"app_id": app_id, "contentType": "url"}).to_list(100)
 	return [to_dict(u) for u in urls] if urls else []
 
-# PUT /api/v1/admin/app/{appId}/urls/{urlId}
-@router.put("/{urlId}", response_model=dict)
-async def update_url(appId: str, urlId: str, url: URLContent = Body(...)):
-	app = await app_collection.find_one({"_id": appId})
+ # PUT /api/v1/admin/app/{app_id}/urls/{urlId}
+@router.put("/{url_id}", response_model=dict)
+async def update_url(app_id: str, url_id: str, url: URLContent = Body(...)):
+	app = await app_collection.find_one({"_id": app_id})
 	if not app or not app.get("googleApiKey"):
 		raise HTTPException(status_code=400, detail="App or Google API key not found")
 	text = url.url + (" " + url.description if url.description else "")
 	api_key = decrypt_api_key(app["googleApiKey"])
 	embedding = await generate_embedding(text, api_key)
 	update_result = await app_content_collection.update_one(
-		{"_id": urlId, "contentType": "url", "appId": appId},
+		{"_id": url_id, "contentType": "url", "app_id": app_id},
 		{"$set": {"content": url.dict(), "embedding": embedding}}
 	)
 	if update_result.modified_count == 0:
 		raise HTTPException(status_code=404, detail="URL not found or data unchanged")
 	return {"message": "URL updated successfully"}
 
-# DELETE /api/v1/admin/app/{appId}/urls/{urlId}
-@router.delete("/{urlId}", response_model=dict)
-async def delete_url(appId: str, urlId: str):
+ # DELETE /api/v1/admin/app/{app_id}/urls/{urlId}
+@router.delete("/{url_id}", response_model=dict)
+async def delete_url(app_id: str, url_id: str):
 	# Remove the document and its embedding
-	delete_result = await app_content_collection.delete_one({"_id": urlId, "contentType": "url", "appId": appId})
+	delete_result = await app_content_collection.delete_one({"_id": url_id, "contentType": "url", "app_id": app_id})
 	if delete_result.deleted_count == 0:
 		raise HTTPException(status_code=404, detail="URL not found")
 	return {"message": "URL deleted successfully"}

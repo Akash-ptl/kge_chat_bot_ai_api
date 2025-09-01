@@ -16,7 +16,7 @@ from ...models.content import DocumentContent
 from typing import List
 import uuid
 
-router = APIRouter(prefix="/api/v1/admin/app/{appId}/documents", tags=["Admin Documents"])
+router = APIRouter(prefix="/api/v1/admin/app/{app_id}/documents", tags=["Admin Documents"])
 
 def to_dict(obj):
 	if isinstance(obj, dict):
@@ -27,10 +27,10 @@ def to_dict(obj):
 	return obj
 
 
-# POST /api/v1/admin/app/{appId}/documents
+ # POST /api/v1/admin/app/{app_id}/documents
 @router.post("", response_model=dict)
-async def create_document(appId: str, document: DocumentContent = Body(...)):
-	app = await app_collection.find_one({"_id": appId})
+async def create_document(app_id: str, document: DocumentContent = Body(...)):
+	app = await app_collection.find_one({"_id": app_id})
 	if not app or not app.get("googleApiKey"):
 		raise HTTPException(status_code=400, detail="App or Google API key not found")
 	api_key = decrypt_api_key(app["googleApiKey"])
@@ -75,7 +75,7 @@ async def create_document(appId: str, document: DocumentContent = Body(...)):
 	embedding = await generate_embedding(extracted_text, api_key)
 	doc = {
 		"_id": str(uuid.uuid4()),
-		"appId": appId,
+		"app_id": app_id,
 		"contentType": "document",
 		"content": document.dict(),
 		"embedding": embedding,
@@ -84,14 +84,14 @@ async def create_document(appId: str, document: DocumentContent = Body(...)):
 	result = await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
-# GET /api/v1/admin/app/{appId}/documents
+ # GET /api/v1/admin/app/{app_id}/documents
 @router.get("", response_model=List[dict])
-async def list_documents(appId: str):
-	docs = await app_content_collection.find({"appId": appId, "contentType": "document"}).to_list(100)
+async def list_documents(app_id: str):
+	docs = await app_content_collection.find({"app_id": app_id, "contentType": "document"}).to_list(100)
 	return [to_dict(d) for d in docs] if docs else []
 
 
-# PUT /api/v1/admin/app/{appId}/documents/{documentId}
+ # PUT /api/v1/admin/app/{app_id}/documents/{documentId}
 
 async def extract_pdf_text(document: DocumentContent) -> str:
 	import tempfile
@@ -129,8 +129,8 @@ async def extract_pdf_text(document: DocumentContent) -> str:
 
 
 @router.put("/{documentId}", response_model=dict)
-async def update_document(appId: str, documentId: str, document: DocumentContent = Body(...)):
-	app = await app_collection.find_one({"_id": appId})
+async def update_document(app_id: str, documentId: str, document: DocumentContent = Body(...)):
+	app = await app_collection.find_one({"_id": app_id})
 	if not app or not app.get("googleApiKey"):
 		raise HTTPException(status_code=400, detail="App or Google API key not found")
 	api_key = decrypt_api_key(app["googleApiKey"])
@@ -141,18 +141,18 @@ async def update_document(appId: str, documentId: str, document: DocumentContent
 
 	embedding = await generate_embedding(extracted_text, api_key)
 	update_result = await app_content_collection.update_one(
-		{"_id": documentId, "contentType": "document", "appId": appId},
+		{"_id": documentId, "contentType": "document", "app_id": app_id},
 		{"$set": {"content": document.dict(), "embedding": embedding, "extractedText": extracted_text[:10000]}}
 	)
 	if update_result.modified_count == 0:
 		raise HTTPException(status_code=404, detail="Document not found or data unchanged")
 	return {"message": "Document updated successfully"}
 
-# DELETE /api/v1/admin/app/{appId}/documents/{documentId}
+ # DELETE /api/v1/admin/app/{app_id}/documents/{documentId}
 @router.delete("/{documentId}", response_model=dict)
-async def delete_document(appId: str, documentId: str):
+async def delete_document(app_id: str, documentId: str):
 	# Remove the document and its embedding
-	delete_result = await app_content_collection.delete_one({"_id": documentId, "contentType": "document", "appId": appId})
+	delete_result = await app_content_collection.delete_one({"_id": documentId, "contentType": "document", "app_id": app_id})
 	if delete_result.deleted_count == 0:
 		raise HTTPException(status_code=404, detail="Document not found")
 	return {"message": "Document deleted successfully"}

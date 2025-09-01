@@ -75,7 +75,7 @@ class DocumentContent(BaseModel):
 
 class AppContentModel(BaseModel):
 	id: Optional[str] = Field(alias="_id", default=None)
-	appId: str
+	app_id: str
 	contentType: Literal["qa", "note", "url", "document"]
 	content: dict
 	embedding: Optional[List[float]] = None
@@ -87,7 +87,7 @@ class AppContentModel(BaseModel):
 		schema_extra = {
 			"example": {
 				"_id": "c1d2e3f4-5678-1234-9abc-def012345678",
-				"appId": "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6",
+				"app_id": "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6",
 				"contentType": "qa",
 				"content": {
 					"question": "What is an embedding?",
