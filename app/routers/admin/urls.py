@@ -39,7 +39,7 @@ async def create_url(app_id: str, url: URLContent = Body(...)):
 		"content": url.dict(),
 		"embedding": embedding
 	}
-	result = await app_content_collection.insert_one(doc)
+	await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
  # GET /api/v1/admin/app/{app_id}/urls

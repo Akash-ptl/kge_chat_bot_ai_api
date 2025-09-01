@@ -48,8 +48,8 @@ async def create_document(app_id: str, document: DocumentContent = Body(...)):
 				await tmp.seek(0)
 				reader = PyPDF2.PdfReader(tmp.name)
 				extracted_text = " ".join([page.extract_text() or "" for page in reader.pages])
-			except Exception as e:
-				raise HTTPException(status_code=400, detail=f"Failed to extract PDF text: {e}")
+			except Exception:
+				raise HTTPException(status_code=400, detail="Failed to extract PDF text")
 	elif document.url:
 		try:
 			async with httpx.AsyncClient() as client:
@@ -62,10 +62,10 @@ async def create_document(app_id: str, document: DocumentContent = Body(...)):
 						await tmp.seek(0)
 						reader = PyPDF2.PdfReader(tmp.name)
 						extracted_text = " ".join([page.extract_text() or "" for page in reader.pages])
-					except Exception as e:
-						raise HTTPException(status_code=400, detail=f"Failed to extract PDF text from URL: {e}")
-		except Exception as e:
-			raise HTTPException(status_code=400, detail=f"Failed to download PDF: {e}")
+					except Exception:
+						raise HTTPException(status_code=400, detail="Failed to extract PDF text from URL")
+		except Exception:
+			raise HTTPException(status_code=400, detail="Failed to download PDF")
 	else:
 		raise HTTPException(status_code=400, detail="Either file or url must be provided.")
 
@@ -106,8 +106,8 @@ async def extract_pdf_text(document: DocumentContent) -> str:
 				await tmp.seek(0)
 				reader = PyPDF2.PdfReader(tmp.name)
 				return " ".join([page.extract_text() or "" for page in reader.pages])
-			except Exception as e:
-				raise HTTPException(status_code=400, detail=f"Failed to extract PDF text: {e}")
+			except Exception:
+				raise HTTPException(status_code=400, detail="Failed to extract PDF text")
 	elif document.url:
 		try:
 			async with httpx.AsyncClient() as client:
@@ -120,10 +120,10 @@ async def extract_pdf_text(document: DocumentContent) -> str:
 						await tmp.seek(0)
 						reader = PyPDF2.PdfReader(tmp.name)
 						return " ".join([page.extract_text() or "" for page in reader.pages])
-					except Exception as e:
-						raise HTTPException(status_code=400, detail=f"Failed to extract PDF text from URL: {e}")
-		except Exception as e:
-			raise HTTPException(status_code=400, detail=f"Failed to download PDF: {e}")
+					except Exception:
+						raise HTTPException(status_code=400, detail="Failed to extract PDF text from URL")
+		except Exception:
+			raise HTTPException(status_code=400, detail="Failed to download PDF")
 	else:
 		raise HTTPException(status_code=400, detail="Either file or url must be provided.")
 

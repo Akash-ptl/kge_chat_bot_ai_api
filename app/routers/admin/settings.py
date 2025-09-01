@@ -9,8 +9,8 @@ router = APIRouter(prefix="/api/v1/admin/app/{app_id}/settings", tags=["Admin Se
 
 @router.put("/welcome-message", response_model=dict)
 async def update_welcome_message(app_id: str, welcome_message: Dict[str, str] = Body(...)):
-    result = await app_collection.update_one({"_id": app_id}, {"$set": {"welcomeMessage": welcome_message}})
-    if result.modified_count == 0:
+    update_result = await app_collection.update_one({"_id": app_id}, {"$set": {"welcomeMessage": welcome_message}})
+    if update_result.modified_count == 0:
         raise HTTPException(status_code=404, detail="App not found or message unchanged")
     return {"message": "Welcome message updated"}
 
@@ -18,11 +18,11 @@ async def update_welcome_message(app_id: str, welcome_message: Dict[str, str] = 
 # New endpoint to update both availableLanguages and defaultLanguage
 @router.put("/languages-settings", response_model=dict)
 async def update_languages_settings(app_id: str, available_languages: List[str] = Body(...), default_language: str = Body(...)):
-    result = await app_collection.update_one(
+    update_result = await app_collection.update_one(
         {"_id": app_id},
         {"$set": {"availableLanguages": available_languages, "defaultLanguage": default_language}}
     )
-    if result.modified_count == 0:
+    if update_result.modified_count == 0:
         raise HTTPException(status_code=404, detail="App not found or settings unchanged")
     return {"message": "Languages and default language updated"}
 
@@ -37,7 +37,7 @@ def decrypt_api_key(enc_key: str) -> str:
 @router.put("/google-api-key", response_model=dict)
 async def update_google_api_key(app_id: str, google_api_key: str = Body(...)):
     encrypted_key = encrypt_api_key(google_api_key)
-    result = await app_collection.update_one({"_id": app_id}, {"$set": {"googleApiKey": encrypted_key}})
-    if result.modified_count == 0:
+    update_result = await app_collection.update_one({"_id": app_id}, {"$set": {"googleApiKey": encrypted_key}})
+    if update_result.modified_count == 0:
         raise HTTPException(status_code=404, detail="App not found or key unchanged")
     return {"message": "Google API key updated"}

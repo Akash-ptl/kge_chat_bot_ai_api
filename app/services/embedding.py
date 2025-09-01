@@ -21,7 +21,7 @@ async def generate_embedding(text: str, api_key: str = None) -> list:
 		resp = await client.post(url, json=payload)
 		try:
 			resp.raise_for_status()
-		except Exception as e:
+		except Exception:
 			print("[Embedding API ERROR] Status:", resp.status_code)
 			print("[Embedding API ERROR] Response:", resp.text)
 			raise

@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/v1/admin/app", tags=["App Admin - Apps"])
 async def create_app(app: AppModel):
 	doc = app.dict(by_alias=True)
 	doc["_id"] = str(uuid.uuid4())
-	result = await apps_collection.insert_one(doc)
+	await apps_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
 from typing import List

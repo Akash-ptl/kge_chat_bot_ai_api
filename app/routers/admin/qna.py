@@ -38,7 +38,7 @@ async def create_qna(app_id: str, qna: QnAContent = Body(...)):
 		"content": qna.dict(),
 		"embedding": embedding
 	}
-	result = await app_content_collection.insert_one(doc)
+	await app_content_collection.insert_one(doc)
 	return {"id": doc["_id"]}
 
 @router.get("", response_model=List[dict])
