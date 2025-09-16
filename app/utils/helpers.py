@@ -48,8 +48,9 @@ async def safe_generate_embedding(text, api_key):
 	try:
 		from app.services.embedding import generate_embedding
 		return await generate_embedding(text, api_key)
-	except Exception:
-		raise HTTPException(status_code=500, detail="Embedding error")
+	except Exception as e:
+		print(f"Embedding error details: {str(e)}")
+		raise HTTPException(status_code=500, detail=f"Embedding error: {str(e)}")
 
 def build_doc_dict(app_id, content_type, content, embedding, extra=None):
 	import uuid

@@ -1,7 +1,8 @@
 
 
 from fastapi import APIRouter, HTTPException, Body
-from app.db import app_content_collection, app_collection
+from app.db import app_collection
+from app.utils.database import get_app_and_collections
 import base64
 def decrypt_api_key(enc_key: str) -> str:
 	try:
@@ -13,7 +14,7 @@ from ...models.content import QnAContent
 from typing import List
 import uuid
 
-router = APIRouter(prefix="/api/v1/admin/app/{appId}/qna", tags=["Admin QnA"])
+router = APIRouter(prefix="/api/v1/client/app/{appId}/qna", tags=["Client QnA"])
 
 def to_dict(obj):
 	if isinstance(obj, dict):
@@ -27,6 +28,11 @@ def to_dict(obj):
 async def create_qna(app_id: str, qna: QnAContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
 	api_key = get_valid_api_key(app)
+
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	text = f"{qna.question} {qna.answer}"
 	embedding = await safe_generate_embedding(text, api_key)
 	doc = build_doc_dict(app_id, "qa", qna.dict(), embedding)
@@ -35,6 +41,10 @@ async def create_qna(app_id: str, qna: QnAContent = Body(...)):
 
 @router.get("", response_model=List[dict])
 async def list_qna(app_id: str):
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	qnas = await app_content_collection.find({"app_id": app_id, "contentType": "qa"}).to_list(100)
 	return [to_dict(q) for q in qnas] if qnas else []
 
@@ -42,6 +52,11 @@ async def list_qna(app_id: str):
 async def update_qna(app_id: str, qa_id: str, qna: QnAContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
 	api_key = get_valid_api_key(app)
+
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	text = f"{qna.question} {qna.answer}"
 	embedding = await safe_generate_embedding(text, api_key)
 	update_result = await app_content_collection.update_one(
@@ -54,6 +69,10 @@ async def update_qna(app_id: str, qa_id: str, qna: QnAContent = Body(...)):
 
 @router.delete("/{qa_id}", response_model=dict)
 async def delete_qna(app_id: str, qa_id: str):
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	# Remove the document and its embedding
 	delete_result = await app_content_collection.delete_one({"_id": qa_id, "contentType": "qa", "app_id": app_id})
 	if delete_result.deleted_count == 0:

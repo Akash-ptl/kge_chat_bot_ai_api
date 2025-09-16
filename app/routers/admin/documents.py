@@ -1,7 +1,8 @@
 
 
 from fastapi import APIRouter, HTTPException, Body, UploadFile, File
-from app.db import app_content_collection, app_collection
+from app.db import app_collection
+from app.utils.database import get_app_and_collections
 import base64
 def decrypt_api_key(enc_key: str) -> str:
 	try:
@@ -14,7 +15,7 @@ from ...models.content import DocumentContent
 from typing import List
 import uuid
 
-router = APIRouter(prefix="/api/v1/admin/app/{app_id}/documents", tags=["Admin Documents"])
+router = APIRouter(prefix="/api/v1/client/app/{app_id}/documents", tags=["Client Documents"])
 
 def to_dict(obj):
 	if isinstance(obj, dict):
@@ -31,6 +32,10 @@ async def create_document(app_id: str, document: DocumentContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
 	api_key = get_valid_api_key(app)
 
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	extracted_text = await extract_pdf_text_from_document(document)
 	if not extracted_text or not extracted_text.strip():
 		raise HTTPException(status_code=400, detail="No text could be extracted from the PDF.")
@@ -42,6 +47,10 @@ async def create_document(app_id: str, document: DocumentContent = Body(...)):
  # GET /api/v1/admin/app/{app_id}/documents
 @router.get("", response_model=List[dict])
 async def list_documents(app_id: str):
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	docs = await app_content_collection.find({"app_id": app_id, "contentType": "document"}).to_list(100)
 	return [to_dict(d) for d in docs] if docs else []
 
@@ -54,6 +63,10 @@ async def list_documents(app_id: str):
 async def update_document(app_id: str, document_id: str, document: DocumentContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
 	api_key = get_valid_api_key(app)
+
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
 
 	extracted_text = await extract_pdf_text_from_document(document)
 	if not extracted_text or not extracted_text.strip():
@@ -71,6 +84,10 @@ async def update_document(app_id: str, document_id: str, document: DocumentConte
 # DELETE /api/v1/admin/app/{app_id}/documents/{document_id}
 @router.delete("/{document_id}", response_model=dict)
 async def delete_document(app_id: str, document_id: str):
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	# Remove the document and its embedding
 	delete_result = await app_content_collection.delete_one({"_id": document_id, "contentType": "document", "app_id": app_id})
 	if delete_result.deleted_count == 0:

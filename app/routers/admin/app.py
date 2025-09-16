@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from app.db import apps_collection
 from ...models.app import AppModel
 
-router = APIRouter(prefix="/api/v1/admin/app", tags=["App Admin - Apps"])
+router = APIRouter(prefix="/api/v1/admin/app", tags=["Admin App - Apps"])
 
 @router.post("/")
 async def create_app(app: AppModel):

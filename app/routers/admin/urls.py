@@ -1,7 +1,8 @@
 
 
 from fastapi import APIRouter, HTTPException, Body
-from app.db import app_content_collection, app_collection
+from app.db import app_collection
+from app.utils.database import get_app_and_collections
 import base64
 def decrypt_api_key(enc_key: str) -> str:
 	try:
@@ -13,7 +14,7 @@ from ...models.content import URLContent
 from typing import List
 import uuid
 
-router = APIRouter(prefix="/api/v1/admin/app/{app_id}/urls", tags=["Admin URLs"])
+router = APIRouter(prefix="/api/v1/client/app/{app_id}/urls", tags=["Client URLs"])
 
 def to_dict(obj):
 	if isinstance(obj, dict):
@@ -28,6 +29,11 @@ def to_dict(obj):
 async def create_url(app_id: str, url: URLContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
 	api_key = get_valid_api_key(app)
+
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	text = url.url + (" " + url.description if url.description else "")
 	embedding = await safe_generate_embedding(text, api_key)
 	doc = build_doc_dict(app_id, "url", url.dict(), embedding)
@@ -37,6 +43,10 @@ async def create_url(app_id: str, url: URLContent = Body(...)):
  # GET /api/v1/admin/app/{app_id}/urls
 @router.get("", response_model=List[dict])
 async def list_urls(app_id: str):
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	urls = await app_content_collection.find({"app_id": app_id, "contentType": "url"}).to_list(100)
 	return [to_dict(u) for u in urls] if urls else []
 
@@ -45,6 +55,11 @@ async def list_urls(app_id: str):
 async def update_url(app_id: str, url_id: str, url: URLContent = Body(...)):
 	app = await app_collection.find_one({"_id": app_id})
 	api_key = get_valid_api_key(app)
+
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	text = url.url + (" " + url.description if url.description else "")
 	embedding = await safe_generate_embedding(text, api_key)
 	update_result = await app_content_collection.update_one(
@@ -58,6 +73,10 @@ async def update_url(app_id: str, url_id: str, url: URLContent = Body(...)):
  # DELETE /api/v1/admin/app/{app_id}/urls/{urlId}
 @router.delete("/{url_id}", response_model=dict)
 async def delete_url(app_id: str, url_id: str):
+	# Get app-specific collections
+	app_data, collections = await get_app_and_collections(app_id)
+	app_content_collection = collections['app_content']
+
 	# Remove the document and its embedding
 	delete_result = await app_content_collection.delete_one({"_id": url_id, "contentType": "url", "app_id": app_id})
 	if delete_result.deleted_count == 0:

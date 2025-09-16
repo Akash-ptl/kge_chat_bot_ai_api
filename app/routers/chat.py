@@ -15,17 +15,19 @@ def get_url_response():
 
 
 
-async def get_llm_response(app, language, x_app_id):
-    # relevant_content is unused and removed
-    ai_response = await call_gemma_api(app["googleApiKey"], "", model="gemini-1.5-flash")
+async def get_llm_response(app, language, x_app_id, prompt):
+    # Use the provided prompt with context instead of empty string
+    ai_response = await call_gemma_api(app["googleApiKey"], prompt, model="gemini-1.5-flash")
     if isinstance(ai_response, dict) and ai_response.get("error"):
         raise HTTPException(status_code=502, detail=ai_response)
-    guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
-    if guardrail_result_out["blocked"]:
-        ai_response = guardrail_result_out["message"]
     return ai_response
 
 async def store_message_and_response(x_app_id, session, user_message, ai_response, language):
+    # Get app-specific collections
+    app, collections = await get_app_and_collections(x_app_id)
+    chat_messages_collection = collections['chat_messages']
+    chat_sessions_collection = collections['chat_sessions']
+
     now = datetime.datetime.now(datetime.timezone.utc)
     await chat_messages_collection.insert_one({
         "appId": x_app_id,
@@ -60,13 +62,14 @@ class ChatMessageResponse(BaseModel):
     guardrailRuleId: Optional[str] = Field(None, example="a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6")
     language: str = Field(..., example="en")
 from uuid import uuid4
-from app.db import app_collection, chat_sessions_collection, chat_messages_collection, app_content_collection, app_guardrails_collection
+from app.db import app_collection
+from app.utils.database import get_app_and_collections
 import base64
 import httpx
 import logging
 import datetime
 
-router = APIRouter(prefix="/api/v1/chat", tags=["Chat User"])
+router = APIRouter(prefix="/api/v1/client/chat", tags=["Client Chat"])
 
 
 def decrypt_api_key(enc_key: str) -> str:
@@ -112,6 +115,10 @@ async def get_app(app_id: str):
     return app
 
 async def get_session(app_id: str, session_id: Optional[str]):
+    # Get app-specific collections
+    app, collections = await get_app_and_collections(app_id)
+    chat_sessions_collection = collections['chat_sessions']
+
     if session_id:
         session = await chat_sessions_collection.find_one({"_id": session_id, "appId": app_id})
         if session:
@@ -157,7 +164,11 @@ def _evaluate_rule(rule, text, language, direction):
     return None
 
 async def apply_guardrails(app_id: str, text: str, language: str, direction: str = "input"):
-    guardrails = await app_guardrails_collection.find({"appId": app_id, "isActive": True}).to_list(100)
+    # Get app-specific collections
+    app, collections = await get_app_and_collections(app_id)
+    app_guardrails_collection = collections['app_guardrails']
+
+    guardrails = await app_guardrails_collection.find({"app_id": app_id, "isActive": True}).to_list(100)
     for rule in guardrails:
         result = _evaluate_rule(rule, text, language, direction)
         if result is not None:
@@ -169,6 +180,11 @@ async def get_relevant_content(app_id: str, limit: int = 5):
     from numpy import dot
     from numpy.linalg import norm
     import numpy as np
+
+    # Get app-specific collections
+    app, collections = await get_app_and_collections(app_id)
+    app_content_collection = collections['app_content']
+
     # Always include all Q&A, Note, and URL entries for the app
     qnas = await app_content_collection.find({"appId": app_id, "contentType": "qa"}).to_list(100)
     notes = await app_content_collection.find({"appId": app_id, "contentType": "note"}).to_list(100)
@@ -179,6 +195,10 @@ async def get_relevant_content(app_id: str, limit: int = 5):
     return qnas + notes + urls + docs
 
 async def get_last_messages(app_id: str, session_id: str, limit: int = 10):
+    # Get app-specific collections
+    app, collections = await get_app_and_collections(app_id)
+    chat_messages_collection = collections['chat_messages']
+
     msgs = await chat_messages_collection.find({"appId": app_id, "sessionId": session_id}).sort("timestamp", -1).to_list(limit)
     return list(reversed(msgs))
 
@@ -203,6 +223,12 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
     logging.info(f"[chat_message] Called with app_id={x_app_id} session_id={x_session_id} message={body.message}")
     app = await get_app(x_app_id)
     session = await get_session(x_app_id, x_session_id)
+
+    # Get app-specific collections
+    app_data, collections = await get_app_and_collections(x_app_id)
+    chat_sessions_collection = collections['chat_sessions']
+    chat_messages_collection = collections['chat_messages']
+
     language = session.get("language") or app.get("defaultLanguage", "en")
     user_message = body.message
     if not user_message:
@@ -278,16 +304,15 @@ async def chat_message(request: Request, body: ChatMessageRequest = Body(...), x
             language=language
         )
 
-    # Generate embedding for user message (embedding variable is now unused and removed)
+    # Gather relevant content and build context-aware prompt
     relevant_content = await get_relevant_content(x_app_id)
-    # Removed unused last_msgs, best_note, best_sim; fixed get_direct_qna_response call
-    ai_response = get_direct_qna_response(user_message, relevant_content)
-    if ai_response is None:
-        ai_response = get_best_note_response()
-    if ai_response is None:
-        ai_response = get_url_response()
-    if ai_response is None:
-        ai_response = await get_llm_response(app, language, x_app_id)
+    qna_context = [c["question"] + "\n" + c["answer"] for c in relevant_content if c.get("contentType") == "qa"]
+    note_context = [c["text"] for c in relevant_content if c.get("contentType") == "note"]
+    url_context = [c["url"] + (" - " + c["description"] if c.get("description") else "") for c in relevant_content if c.get("contentType") == "url"]
+    doc_context = [c.get("filename", "") + ": " + c.get("text", "") for c in relevant_content if c.get("contentType") == "document"]
+    last_msgs = await get_last_messages(x_app_id, session["_id"])
+    prompt = build_prompt(user_message, qna_context, note_context, url_context, doc_context, last_msgs)
+    ai_response = await get_llm_response(app, language, x_app_id, prompt)
     guardrail_result_out = await apply_guardrails(x_app_id, ai_response, language, direction="output")
     if guardrail_result_out["blocked"]:
         ai_response = guardrail_result_out["message"]

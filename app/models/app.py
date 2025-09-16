@@ -21,5 +21,10 @@ class AppModel(BaseModel):
     defaultLanguage: str = Field(..., example="en")
     availableLanguages: List[str] = Field(..., example=["en", "es"])
     googleApiKey: Optional[str] = Field(None)
+    mongodbConnectionString: str = Field(
+        ...,
+        example="mongodb://localhost:27017/app_db_name",
+        description="MongoDB connection string for this app's data storage"
+    )
     createdAt: datetime = Field(default_factory=datetime.utcnow, example="2025-08-23T12:00:00Z")
     updatedAt: datetime = Field(default_factory=datetime.utcnow, example="2025-08-23T12:00:00Z")

@@ -1,10 +1,16 @@
 import requests
+from dotenv import load_dotenv
+load_dotenv()
 import json
 import time
 
 ADMIN_BASE_URL = "http://localhost:8000/api/v1/admin/app"
-DOCS_URL_TEMPLATE = ADMIN_BASE_URL + "/{app_id}/documents"
-CHAT_BASE_URL = "http://localhost:8000/api/v1/chat/message"
+CLIENT_BASE_URL = "http://localhost:8000/api/v1/client/app"
+DOCS_URL_TEMPLATE = CLIENT_BASE_URL + "/{app_id}/documents"
+QNA_URL_TEMPLATE = CLIENT_BASE_URL + "/{app_id}/qna"
+NOTES_URL_TEMPLATE = CLIENT_BASE_URL + "/{app_id}/notes"
+URLS_URL_TEMPLATE = CLIENT_BASE_URL + "/{app_id}/urls"
+CHAT_BASE_URL = "http://localhost:8000/api/v1/client/chat/message"
 import os
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "test-key")
 PDF_URL = "https://www.adobe.com/support/products/enterprise/knowledgecenter/media/c4611_sample_explain.pdf"
@@ -88,6 +94,7 @@ def main():
     if not app_id:
         print("App creation failed, aborting test.")
         return
+
     try:
         headers = {"Content-Type": "application/json", "X-App-ID": app_id}
         session_id = None
@@ -97,9 +104,10 @@ def main():
             {"question": "What is FastAPI?", "answer": "FastAPI is a modern, fast web framework for building APIs with Python.", "language": "en"},
             {"question": "What is Python?", "answer": "Python is a popular programming language.", "language": "en"}
         ]
-        qna_url = f"{ADMIN_BASE_URL}/{app_id}/qna"
+        qna_url = QNA_URL_TEMPLATE.format(app_id=app_id)
         for qna in qnas:
-            resp = requests.post(qna_url, json=qna)
+            params = {"app_id": app_id}
+            resp = requests.post(qna_url, json=qna, params=params)
             print_response("Create QnA", qna_url, qna, resp)
         time.sleep(1)
 
@@ -108,9 +116,10 @@ def main():
             {"text": "This is a note about the chatbot system.", "language": "en"},
             {"text": "This is a second note about AI chatbots.", "language": "en"}
         ]
-        note_url = f"{ADMIN_BASE_URL}/{app_id}/notes"
+        note_url = NOTES_URL_TEMPLATE.format(app_id=app_id)
         for note in notes:
-            resp = requests.post(note_url, json=note)
+            params = {"app_id": app_id}
+            resp = requests.post(note_url, json=note, params=params)
             print_response("Create Note", note_url, note, resp)
         time.sleep(1)
 
@@ -119,9 +128,10 @@ def main():
             {"url": "https://fastapi.tiangolo.com/", "description": "Official FastAPI documentation", "language": "en"},
             {"url": "https://www.python.org/", "description": "Official Python website", "language": "en"}
         ]
-        url_url = f"{ADMIN_BASE_URL}/{app_id}/urls"
+        url_url = URLS_URL_TEMPLATE.format(app_id=app_id)
         for url in urls:
-            resp = requests.post(url_url, json=url)
+            params = {"app_id": app_id}
+            resp = requests.post(url_url, json=url, params=params)
             print_response("Create URL", url_url, url, resp)
         time.sleep(1)
 
@@ -137,8 +147,9 @@ def main():
                 "url": pdf_url,
                 "language": "en"
             }
-            docs_url = f"{ADMIN_BASE_URL}/{app_id}/documents"
-            resp = requests.post(docs_url, headers=headers, json=doc_payload)
+            docs_url = DOCS_URL_TEMPLATE.format(app_id=app_id)
+            params = {"app_id": app_id}
+            resp = requests.post(docs_url, headers=headers, json=doc_payload, params=params)
             print_response("Upload PDF Document", docs_url, doc_payload, resp)
         time.sleep(3)
 

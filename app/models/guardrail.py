@@ -15,7 +15,7 @@ class GuardrailModel(BaseModel):
 	updatedAt: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
 	class Config:
-		schema_extra = {
+		json_schema_extra = {
 			"example": {
 				"_id": "b7e6c2e2-8c2e-4b7e-9c2e-8c2e4b7e9c2e",
 				"app_id": "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6",

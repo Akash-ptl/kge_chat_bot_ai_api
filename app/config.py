@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     MONGO_URL: str
     MONGO_DB_NAME: str = "ai_chat_bot"
     GOOGLE_API_KEY: str = ""
+    gemma_embedding_model: str = ""
 
 
     class Config:

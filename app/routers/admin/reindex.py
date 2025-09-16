@@ -7,7 +7,7 @@ def decrypt_api_key(enc_key: str) -> str:
 	return base64.b64decode(enc_key.encode()).decode()
 from app.utils.helpers import get_valid_api_key, safe_generate_embedding
 
-router = APIRouter(prefix="/api/v1/admin/app/{app_id}/train", tags=["Admin Train"])
+router = APIRouter(prefix="/api/v1/client/app/{app_id}/train", tags=["Client Train"])
 
 async def reindex_content(app_id: str):
 	app = await app_collection.find_one({"_id": app_id})
