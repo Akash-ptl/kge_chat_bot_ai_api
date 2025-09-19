@@ -1,0 +1,141 @@
+AI Chatbot Platform - Deployment Instructions
+
+What You Need to Deploy
+
+1. MongoDB Database
+- Option A: MongoDB Atlas (Cloud) - Recommended
+- Option B: Local MongoDB installation
+
+2. Google API Key
+- Google Gemma API access
+- API key for gemma model
+
+Configuration Values Required
+
+Create these environment variables in your deployment platform:
+
+MONGO_URL=mongodb+srv://username:password@cluster.mongodb.net/ai_chat_bot
+MONGO_DB_NAME=ai_chat_bot
+GOOGLE_API_KEY=AIzaSy...your-actual-api-key
+GEMMA_EMBEDDING_MODEL=embedding-001
+
+Deployment Commands
+
+Build Command:
+pip install -r requirements.txt
+
+Start Command:
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+Step-by-Step Setup
+
+Step 1: Get MongoDB Connection
+For MongoDB Atlas (Recommended):
+1. Go to https://mongodb.com/atlas
+2. Create free account and cluster
+3. Create database user with read/write access
+4. Get connection string, replace <username> and <password>
+5. Use this as your MONGO_URL
+
+Example MongoDB URL:
+mongodb+srv://chatbot_user:mypassword123@cluster0.abcd.mongodb.net/ai_chat_bot
+
+Step 2: Get Google API Key
+1. Go to https://aistudio.google.com/
+2. Create new project or select existing
+3. Generate API key
+4. Copy the key (starts with AIzaSy...)
+
+Step 3: Deploy on Your Platform
+
+For Render:
+1. Connect GitHub repository
+2. Choose "Web Service"
+3. Set environment variables above
+4. Deploy
+
+For Railway:
+1. Connect GitHub repository  
+2. Add environment variables in Variables tab
+3. Deploy automatically
+
+For Heroku:
+1. Create new Heroku app
+2. Set Config Vars with environment variables
+3. Deploy via GitHub integration
+
+For DigitalOcean/AWS/Other:
+1. Set environment variables in your platform
+2. Use the build and start commands above
+
+Testing Your Deployment
+
+1. Health Check
+Visit: https://your-domain.com/
+
+Should return:
+{"message": "Chatbot API is running"}
+
+2. Create First App
+curl -X POST "https://your-domain.com/api/v1/admin/apps" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Chatbot",
+    "description": "Test chatbot",
+    "googleApiKey": "your-google-api-key",
+    "welcomeMessage": {"en": "Hello! How can I help?"},
+    "languages": ["en"]
+  }'
+
+3. Test Chat
+curl -X POST "https://your-domain.com/api/v1/chat/message" \
+  -H "Content-Type: application/json" \
+  -H "X-App-ID: your-app-id-from-step-2" \
+  -d '{"message": "Hello"}'
+
+Common Issues & Solutions
+
+Issue: "ModuleNotFoundError: No module named 'aiofiles'"
+Solution: Already fixed in requirements.txt
+
+Issue: "MongoDB connection failed"
+Solution: 
+- Check your MongoDB URL format
+- Verify username/password
+- Ensure cluster is running
+
+Issue: "Google API error"
+Solution:
+- Verify API key is correct
+- Check API is enabled in Google Console
+- Verify billing is set up
+
+Issue: "Port already in use"
+Solution: Use $PORT in start command (already included above)
+
+Security Notes
+
+- Never commit API keys to Git
+- Use environment variables for all secrets
+- Enable HTTPS in production
+- Restrict MongoDB network access
+- Monitor API usage
+
+Final Checklist
+
+Before going live:
+- MongoDB database is accessible
+- Google API key works
+- All 4 environment variables are set
+- Health check endpoint returns success
+- Can create an app via API
+- Can send chat messages
+
+Support
+
+If you encounter issues:
+1. Check deployment platform logs
+2. Verify all environment variables are set correctly
+3. Test MongoDB and Google API connections separately
+
+That's it! Your AI Chatbot Platform will be running and ready to handle multi-tenant chat applications with document processing, guardrails, and Google Gemma AI integration.

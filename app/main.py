@@ -38,7 +38,3 @@ def root():
     return {"message": "Chatbot API is running"}
 
 
-
-# /Users/akashptl/Cli/KGE/Chat_Bot/ai_chat_bot/.venv/bin/uvicorn app.main:app --port 8000 --reload
-
-

@@ -21,8 +21,8 @@ class AppModel(BaseModel):
     defaultLanguage: str = Field(..., example="en")
     availableLanguages: List[str] = Field(..., example=["en", "es"])
     googleApiKey: Optional[str] = Field(None)
-    mongodbConnectionString: str = Field(
-        ...,
+    mongodbConnectionString: Optional[str] = Field(
+        None,
         example="mongodb://localhost:27017/app_db_name",
         description="MongoDB connection string for this app's data storage"
     )
